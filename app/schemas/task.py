@@ -12,7 +12,6 @@ class TaskCreate(BaseModel):
     due_date: Optional[datetime] = None
     assigned_to_id: Optional[int] = None
 
-
 class TaskUpdate(BaseModel):
     title: str
     description: Optional[str] = None
@@ -41,3 +40,32 @@ class TaskResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class KanbanTaskResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    status: str
+    priority: str
+    due_date: Optional[datetime]
+
+    created_by_id: int
+    assigned_to_id: Optional[int]
+
+    created_by_name: str
+    assigned_to_name: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class KanbanBoardResponse(BaseModel):
+    todo: list[KanbanTaskResponse]
+    in_progress: list[KanbanTaskResponse]
+    review: list[KanbanTaskResponse]
+    done: list[KanbanTaskResponse]
+
+
+class TaskStatusUpdate(BaseModel):
+    status: str

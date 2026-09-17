@@ -11,28 +11,29 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
+ const handleLogin = async (e) => {
+  e.preventDefault();
 
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
 
-      const data = await loginUser(email, password);
+    const data = await loginUser(email, password);
 
-      localStorage.clear();
-      localStorage.setItem("access_token", data.access_token);
+    localStorage.clear();
+    localStorage.setItem("access_token", data.access_token);
 
-      navigate("/dashboard");
-    } catch (error) {
-      alert(error.response?.data?.detail || "Invalid Email or Password.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    navigate("/dashboard");
+  } catch (error) {
+    alert(error.response?.data?.detail || "Invalid Email or Password.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl">
+        {/* Header */}
         <div className="mb-8 text-center">
           <h1 className="text-4xl font-bold tracking-wide text-slate-900">
             STACKLY
@@ -43,7 +44,9 @@ function Login() {
           </p>
         </div>
 
+        {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-5">
+          {/* Email */}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Email Address
@@ -59,6 +62,7 @@ function Login() {
             />
           </div>
 
+          {/* Password */}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">
               Password
@@ -84,6 +88,7 @@ function Login() {
             </div>
           </div>
 
+          {/* Login Button */}
           <button
             type="submit"
             disabled={loading}
@@ -93,6 +98,7 @@ function Login() {
           </button>
         </form>
 
+        {/* Footer */}
         <div className="mt-8 border-t border-slate-200 pt-5 text-center">
           <p className="text-xs text-slate-500">
             Secure access for authorized Stackly users only.

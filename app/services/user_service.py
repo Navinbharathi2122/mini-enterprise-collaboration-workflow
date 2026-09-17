@@ -6,6 +6,9 @@ from app.schemas.user import UserCreate, UserUpdate
 from app.core.security import hash_password
 
 
+# ==========================================
+# CREATE USER
+# ==========================================
 def create_user(db: Session, user_data: UserCreate, current_user: User):
 
     if current_user.role != "admin":
@@ -40,6 +43,9 @@ def create_user(db: Session, user_data: UserCreate, current_user: User):
     return new_user
 
 
+# ==========================================
+# GET USERS
+# ==========================================
 def get_users(db: Session, current_user: User):
 
     if current_user.role == "admin":
@@ -62,6 +68,9 @@ def get_users(db: Session, current_user: User):
     return users
 
 
+# ==========================================
+# GET USER BY ID
+# ==========================================
 def get_user_by_id(db: Session, user_id: int, current_user: User):
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -92,6 +101,9 @@ def get_user_by_id(db: Session, user_id: int, current_user: User):
     return user
 
 
+# ==========================================
+# UPDATE USER
+# ==========================================
 def update_user(
     db: Session,
     user_id: int,
@@ -138,6 +150,9 @@ def update_user(
     return user
 
 
+# ==========================================
+# DELETE USER
+# ==========================================
 def delete_user(
     db: Session,
     user_id: int,
@@ -161,6 +176,4 @@ def delete_user(
     db.delete(user)
     db.commit()
 
-    return {
-        "message": "User deleted successfully."
-    }
+    return {"message": "User deleted successfully."}

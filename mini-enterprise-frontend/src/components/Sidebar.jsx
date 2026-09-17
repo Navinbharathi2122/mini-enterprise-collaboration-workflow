@@ -90,6 +90,37 @@ function Sidebar() {
           <span className="text-lg">🗂️</span>
           Tasks
         </NavLink>
+
+        <NavLink
+          to="/kanban"
+          className={({ isActive }) =>
+            `${menuItem} ${isActive ? activeMenu : normalMenu}`
+          }
+        >
+          <span className="text-lg">📌</span>
+          Kanban Board
+        </NavLink>
+
+        <NavLink
+          to="/approvals"
+          className={({ isActive }) =>
+            `${menuItem} ${isActive ? activeMenu : normalMenu}`
+          }
+        >
+          <span className="text-lg">✅</span>
+          Approvals
+        </NavLink>
+
+        
+        <NavLink
+          to="/leave-requests"
+          className={({ isActive }) =>
+            `${menuItem} ${isActive ? activeMenu : normalMenu}`
+          }
+        >
+          <span className="text-lg">🌴</span>
+          Leave Requests
+        </NavLink>
       </nav>
 
       <div className="border-t border-slate-800 p-4">

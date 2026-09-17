@@ -14,21 +14,19 @@ from app.models.user import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+SECRET_KEY = settings.secret_key
+ALGORITHM = settings.algorithm
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
+
+bearer_scheme = HTTPBearer()
+
 
 def hash_password(password: str):
     return pwd_context.hash(password)
 
 
-def verify_password(plain_password: str, hashed_password: str):
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-SECRET_KEY = settings.secret_key
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-
-
-bearer_scheme = HTTPBearer()
+def verify_password(password: str, hashed_password: str):
+    return pwd_context.verify(password, hashed_password)
 
 
 def create_access_token(data: dict):
@@ -40,13 +38,11 @@ def create_access_token(data: dict):
 
     to_encode.update({"exp": expire})
 
-    encoded_jwt = jwt.encode(
+    return jwt.encode(
         to_encode,
         SECRET_KEY,
         algorithm=ALGORITHM
     )
-
-    return encoded_jwt
 
 
 def get_current_user(
@@ -55,10 +51,7 @@ def get_current_user(
 ):
     token = credentials.credentials
 
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired token"
-    )
+    print("TOKEN RECEIVED:", token)
 
     try:
         payload = jwt.decode(
@@ -67,17 +60,32 @@ def get_current_user(
             algorithms=[ALGORITHM]
         )
 
+        print("JWT PAYLOAD:", payload)
+
         user_id = payload.get("sub")
 
         if user_id is None:
-            raise credentials_exception
+            raise HTTPException(
+                status_code=401,
+                detail="Token has no user id"
+            )
 
-    except JWTError:
-        raise credentials_exception
+        user = db.query(User).filter(User.id == int(user_id)).first()
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+        print("DB USER:", user)
 
-    if user is None:
-        raise credentials_exception
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="User not found in database"
+            )
 
-    return user
+        return user
+
+    except JWTError as e:
+        print("JWT ERROR:", str(e))
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+        )

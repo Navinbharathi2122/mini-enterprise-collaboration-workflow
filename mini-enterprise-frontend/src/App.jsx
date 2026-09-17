@@ -4,6 +4,9 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Users from "./pages/Users";
 import Tasks from "./pages/Tasks";
+import Kanban from "./pages/Kanban";
+import Approvals from "./pages/Approvals";
+import LeaveRequests from "./pages/LeaveRequests";
 
 import { getUserFromToken } from "./utils/jwt";
 
@@ -31,8 +34,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+       
         <Route path="/" element={<Login />} />
 
+        
         <Route
           path="/dashboard"
           element={
@@ -42,6 +47,7 @@ function App() {
           }
         />
 
+        
         <Route
           path="/users"
           element={
@@ -51,6 +57,7 @@ function App() {
           }
         />
 
+       
         <Route
           path="/tasks"
           element={
@@ -60,6 +67,37 @@ function App() {
           }
         />
 
+        
+        <Route
+          path="/kanban"
+          element={
+            <ProtectedRoute>
+              <Kanban />
+            </ProtectedRoute>
+          }
+        />
+
+        
+        <Route
+          path="/approvals"
+          element={
+            <ProtectedRoute>
+              <Approvals />
+            </ProtectedRoute>
+          }
+        />
+
+       
+        <Route
+          path="/leave-requests"
+          element={
+            <ProtectedRoute>
+              <LeaveRequests />
+            </ProtectedRoute>
+          }
+        />
+
+       
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar";
 import CreateTaskModal from "../components/CreateTaskModal";
 import EditTaskModal from "../components/EditTaskModal";
 import DeleteTaskModal from "../components/DeleteTaskModal";
+import TaskCommentsModal from "../components/TaskCommentsModal";
 
 import { getAllTasks } from "../services/taskService";
 import { getUserFromToken } from "../utils/jwt";
@@ -22,6 +23,7 @@ function Tasks() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
 
   const [selectedTask, setSelectedTask] = useState(null);
 
@@ -41,26 +43,42 @@ function Tasks() {
     }
   };
 
+  // Search
   const filteredTasks = tasks.filter((task) =>
     task.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  const completedTasks = tasks.filter(
-    (task) => task.status === "completed"
+  // ===== REAL COUNTS FROM FASTAPI =====
+  const todoTasks = tasks.filter(
+    (task) => task.status?.toLowerCase() === "todo"
   ).length;
 
-  const pendingTasks = tasks.filter(
-    (task) => task.status !== "completed"
+  const inProgressTasks = tasks.filter(
+    (task) => task.status?.toLowerCase() === "in_progress"
   ).length;
+
+  const reviewTasks = tasks.filter(
+    (task) => task.status?.toLowerCase() === "review"
+  ).length;
+
+  const completedTasks = tasks.filter(
+    (task) => task.status?.toLowerCase() === "done"
+  ).length;
+
+  const pendingTasks = todoTasks + inProgressTasks + reviewTasks;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
+      {/* Sidebar */}
       <Sidebar />
 
+      {/* Right Content */}
       <div className="flex flex-1 flex-col">
+        {/* Navbar */}
         <Navbar />
 
         <main className="flex-1 overflow-y-auto p-8">
+          {/* Header */}
           <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-3xl font-bold text-slate-900">
@@ -68,7 +86,8 @@ function Tasks() {
               </h1>
 
               <p className="mt-2 text-slate-500">
-                Create, assign, update and monitor workflow tasks across your team.
+                Create, assign, update and monitor workflow tasks across your
+                team.
               </p>
             </div>
 
@@ -82,6 +101,7 @@ function Tasks() {
             )}
           </div>
 
+          {/* Summary Cards */}
           <div className="mb-8 grid gap-5 md:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm text-slate-500">Total Tasks</p>
@@ -108,6 +128,42 @@ function Tasks() {
             </div>
           </div>
 
+          {/* Workflow Summary */}
+          <div className="mb-8 grid gap-5 md:grid-cols-4">
+            <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-5">
+              <p className="text-sm font-medium text-yellow-700">TODO</p>
+
+              <h3 className="mt-2 text-3xl font-bold text-yellow-700">
+                {todoTasks}
+              </h3>
+            </div>
+
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+              <p className="text-sm font-medium text-blue-700">IN PROGRESS</p>
+
+              <h3 className="mt-2 text-3xl font-bold text-blue-700">
+                {inProgressTasks}
+              </h3>
+            </div>
+
+            <div className="rounded-2xl border border-purple-200 bg-purple-50 p-5">
+              <p className="text-sm font-medium text-purple-700">REVIEW</p>
+
+              <h3 className="mt-2 text-3xl font-bold text-purple-700">
+                {reviewTasks}
+              </h3>
+            </div>
+
+            <div className="rounded-2xl border border-green-200 bg-green-50 p-5">
+              <p className="text-sm font-medium text-green-700">DONE</p>
+
+              <h3 className="mt-2 text-3xl font-bold text-green-700">
+                {completedTasks}
+              </h3>
+            </div>
+          </div>
+
+          {/* Search */}
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <input
               type="text"
@@ -118,6 +174,7 @@ function Tasks() {
             />
           </div>
 
+          {/* Table */}
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full">
@@ -136,13 +193,19 @@ function Tasks() {
                 <tbody className="divide-y divide-slate-200">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-slate-500">
+                      <td
+                        colSpan={7}
+                        className="px-6 py-10 text-center text-slate-500"
+                      >
                         Loading tasks...
                       </td>
                     </tr>
                   ) : filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-slate-500">
+                      <td
+                        colSpan={7}
+                        className="px-6 py-10 text-center text-slate-500"
+                      >
                         No tasks found.
                       </td>
                     </tr>
@@ -167,13 +230,16 @@ function Tasks() {
                           {task.assigned_to_name || "Not Assigned"}
                         </td>
 
+                        {/* Status Badge */}
                         <td className="px-6 py-4">
                           <span
                             className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
-                              task.status === "completed"
+                              task.status === "done"
                                 ? "bg-green-100 text-green-700"
                                 : task.status === "in_progress"
                                 ? "bg-blue-100 text-blue-700"
+                                : task.status === "review"
+                                ? "bg-purple-100 text-purple-700"
                                 : "bg-yellow-100 text-yellow-700"
                             }`}
                           >
@@ -181,6 +247,7 @@ function Tasks() {
                           </span>
                         </td>
 
+                        {/* Priority */}
                         <td className="px-6 py-4">
                           <span
                             className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
@@ -195,20 +262,32 @@ function Tasks() {
                           </span>
                         </td>
 
+                        {/* Due Date */}
                         <td className="px-6 py-4 text-slate-600">
                           {task.due_date
                             ? new Date(task.due_date).toLocaleDateString("en-GB")
                             : "-"}
                         </td>
 
+                        {/* Actions */}
                         <td className="px-6 py-4">
-                          <div className="flex justify-center gap-2">
+                          <div className="flex flex-wrap justify-center gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedTask(task);
+                                setShowCommentsModal(true);
+                              }}
+                              className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700"
+                            >
+                              💬 Comments
+                            </button>
+
                             <button
                               onClick={() => {
                                 setSelectedTask(task);
                                 setShowEditModal(true);
                               }}
-                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                             >
                               Edit
                             </button>
@@ -219,7 +298,7 @@ function Tasks() {
                                   setSelectedTask(task);
                                   setShowDeleteModal(true);
                                 }}
-                                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+                                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-700"
                               >
                                 Delete
                               </button>
@@ -234,6 +313,7 @@ function Tasks() {
             </div>
           </div>
 
+          {/* Modals */}
           {showCreateModal && (
             <CreateTaskModal
               closeModal={() => setShowCreateModal(false)}
@@ -254,6 +334,13 @@ function Tasks() {
               task={selectedTask}
               closeModal={() => setShowDeleteModal(false)}
               refreshTasks={fetchTasks}
+            />
+          )}
+
+          {showCommentsModal && selectedTask && (
+            <TaskCommentsModal
+              task={selectedTask}
+              closeModal={() => setShowCommentsModal(false)}
             />
           )}
         </main>
