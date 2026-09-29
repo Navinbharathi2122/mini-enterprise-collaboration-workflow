@@ -1,533 +1,188 @@
-# STACKLY - Mini Enterprise Collaboration & Workflow Management System (MECW)
+# Mini Enterprise Collaboration & Workflow Management System
 
-## About the Project
+A full-stack enterprise collaboration and workflow management platform built using **FastAPI, React.js, SQLAlchemy, JWT Authentication and SQLite/MySQL/PostgreSQL-ready architecture**.
 
-**STACKLY – Mini Enterprise Collaboration & Workflow Management System (MECW)** is a full-stack enterprise workflow application developed as part of **Phase 1** and **Phase 2** of the Stackly Mini Enterprise Collaboration Project.
+The application was developed incrementally across three phases:
 
-The application helps organizations securely manage users, tasks, approvals, comments, leave requests, and workflow tracking through **Role-Based Access Control (RBAC)**.
+- **Phase 1 — Mini Enterprise Collaboration & Workflow**
+- **Phase 2 — Workflow & Collaboration System**
+- **Phase 3 — Enterprise Features & Intelligence Layer**
 
-The project is built using **FastAPI** for the backend and **React + Vite** for the frontend with JWT authentication and a workflow-driven architecture.
+The final application combines authentication, role-based access control, task management, Kanban workflow, approvals, comments, dashboard analytics, document management, audit tracking, notifications and AI-powered dashboard insights into a single enterprise workflow platform.
 
+---
 
+##  Table of Contents
 
-# Project Phases
+- [Project Overview](#-project-overview)
+- [Objectives](#-objectives)
+- [Key Features](#-key-features)
+- [Project Phases](#-project-phases)
+- [User Roles](#-user-roles)
+- [System Workflow](#-system-workflow)
+- [Technology Stack](#-technology-stack)
+- [Architecture](#-architecture)
+- [Project Structure](#-project-structure)
+- [Core Modules](#-core-modules)
+- [Task Workflow](#-task-workflow)
+- [Approval Workflow](#-approval-workflow)
+- [Document Management](#-document-management)
+- [Audit Logging](#-audit-logging)
+- [Notification System](#-notification-system)
+- [AI Dashboard Intelligence](#-ai-dashboard-intelligence)
+- [Dashboard](#-dashboard)
+- [API Endpoints](#-api-endpoints)
+- [Database Models](#-database-models)
+- [Authentication & Security](#-authentication--security)
+- [Environment Configuration](#-environment-configuration)
+- [Backend Setup](#-backend-setup)
+- [Frontend Setup](#-frontend-setup)
+- [Running the Application](#-running-the-application)
+- [Swagger API Documentation](#-swagger-api-documentation)
+- [Testing](#-testing)
+- [GitHub Submission](#-github-submission)
+- [Future Enhancements](#-future-enhancements)
+- [Conclusion](#-conclusion)
 
-## Phase 1 – Enterprise Task Management Foundation
+---
 
-Implemented a secure role-based task management system including:
+# 📖 Project Overview
 
-* JWT Authentication
-* User Management
-* Task Management
-* Role-Based Dashboard
-* Task Assignment Workflow
+Modern organizations require a centralized platform to manage tasks, employees, workflows, approvals, documents and communication.
 
-## Phase 2 – Workflow & Collaboration System
+This project provides an enterprise-style solution where users can:
 
-Enhanced the application into a real-world workflow platform by implementing:
+- Register and authenticate securely
+- Access features according to their role
+- Create and assign tasks
+- Track task progress
+- Manage tasks through a Kanban workflow
+- Add comments and collaboration notes
+- Submit and process approvals
+- Upload and manage documents
+- Maintain document versions
+- Track important system activities
+- Receive notifications
+- View dashboard analytics
+- View AI-powered task insights
 
-* Kanban Workflow Board
-* Workflow Validation Rules
-* Comments & Collaboration Module
-* Approval Workflow System
-* Dashboard Analytics
-* Leave Request Management
+The system was developed progressively through three phases, where each phase extends the functionality of the previous phase.
 
+---
 
+# 🎯 Objectives
 
-# Tech Stack
+The main objectives of the project are:
 
-## Backend
+- Implement secure JWT-based authentication
+- Implement role-based access control
+- Build RESTful APIs using FastAPI
+- Design relational database models
+- Implement task management
+- Implement task assignment
+- Implement Kanban workflow
+- Enforce valid task status transitions
+- Implement approval workflows
+- Implement comments and collaboration
+- Build dashboard analytics
+- Implement document upload and version management
+- Track important system activities through audit logs
+- Implement user-specific notifications
+- Provide AI-powered dashboard insights
+- Build a responsive React frontend
+- Integrate frontend and backend APIs
+- Provide Swagger API documentation
+- Maintain a scalable and maintainable project structure
 
-* FastAPI
-* SQLAlchemy ORM
-* Pydantic
-* Alembic
-* MySQL
-* JWT Authentication (`python-jose`)
-* Bcrypt Password Hashing
+---
 
-## Frontend
+# ✨ Key Features
 
-* React.js
-* Vite
-* Tailwind CSS
-* React Router DOM
-* Axios
-* @hello-pangea/dnd (Drag & Drop Kanban)
+## 🔐 Authentication
 
+- User registration
+- User login
+- JWT authentication
+- Password hashing
+- Protected API endpoints
+- Current user information
+- Token-based frontend authentication
 
+---
 
-# System Architecture
+## 👥 Role-Based Access Control
 
-The project follows a **Layered Service-Based Architecture**.
+The system supports three primary roles:
+
+### Admin
+
+- Full system access
+- View all users
+- View all tasks
+- Manage tasks
+- Assign tasks
+- View audit logs
+- Monitor system activities
+- Access enterprise dashboard information
+
+### Manager
+
+- Create tasks
+- Assign tasks
+- Manage team-related tasks
+- Monitor team progress
+- Manage workflow
+- Process approvals
+- View relevant dashboard information
+
+### Employee
+
+- View assigned tasks
+- Update assigned task status
+- Add comments
+- Submit workflow/approval requests
+- Upload and access permitted documents
+- Receive notifications
+- View relevant dashboard information
+
+---
+
+# 🏗 Project Phases
+
+## Phase 1 — Mini Enterprise Collaboration & Workflow
+
+Phase 1 established the foundation of the application.
+
+### Implemented Features
+
+- JWT authentication
+- User registration
+- User login
+- Password hashing
+- Role-based access control
+- User management
+- Task creation
+- Task assignment
+- Task listing
+- Task update
+- Task deletion
+- Task status management
+- Basic dashboard
+- Frontend/backend integration
+
+### Main Roles
 
 ```text
-React Frontend
-      │
-    Axios API
-      │
-FastAPI Routers
-      │
-Service Layer
-      │
-SQLAlchemy Models
-      │
-MySQL Database
-```
-
-
-# User Roles
-
-## Admin
-
-* Full system access.
-* Manage users.
-* Create, update and delete tasks.
-* Assign tasks to any user.
-* View complete dashboard analytics.
-* Final approval authority.
-
-## Manager
-
-* View employees.
-* Create and assign tasks.
-* Manage assigned team tasks.
-* Approve, Reject or Hold approval requests.
-* View team dashboard analytics.
-
-## Employee
-
-* View assigned tasks only.
-* Update workflow status.
-* Submit approval requests.
-* Add comments to tasks.
-* Apply leave requests.
-
-
-
-# Features Implemented
-
-## Authentication Module
-
-* User Registration
-* User Login
-* JWT Token Authentication
-* Current Logged-in User (`/auth/me`)
-* Protected APIs
-* Password Hashing using bcrypt
-
-## User Management Module
-
-* Create User
-* View Users
-* Update User
-* Delete User
-* Role-Based Access Control
-
-## Task Management Module
-
-* Create Task
-* View Task List
-* View Single Task
-* Update Task
-* Delete Task
-* Assign Task to Employee
-* Task Priority (Low / Medium / High)
-* Due Date Management
-
-## Kanban Workflow Module (Phase 2)
-
-Workflow Lifecycle:
-
-**TODO → IN PROGRESS → REVIEW → DONE**
-
-Features:
-
-* Drag & Drop Kanban Board.
-* Backend Workflow Validation.
-* Role-Based Kanban View.
-* Task Status Update API.
-* Invalid Workflow Transition Blocking.
-
-## Workflow Validation Rules
-
-Allowed transitions:
-
-* TODO → IN_PROGRESS
-* IN_PROGRESS → REVIEW
-* REVIEW → DONE
-
-Blocked transitions:
-
-* TODO → DONE
-* TODO → REVIEW
-* IN_PROGRESS → DONE
-* REVIEW → TODO
-
-## Comments & Collaboration Module
-
-* Add comments to tasks.
-* View task comments.
-* Internal comments for Manager/Admin.
-* Public comments for all authorized users.
-* Timestamp tracking.
-* User tracking.
-
-## Approval Workflow Module
-
-Approval Flow:
-
-**Employee → Manager → Admin**
-
-Features:
-
-* Submit approval request.
-* View approval requests.
-* Approve request.
-* Reject request.
-* Hold request.
-* Approval history tracking.
-* Rejection comment support.
-
-## Leave Request Module
-
-* Employee leave request submission.
-* Manager leave review.
-* Leave approval status.
-* Role-Based leave visibility.
-
-## Dashboard & Analytics Module
-
-Dashboard displays real-time data from FastAPI.
-
-Features:
-
-* Total Users.
-* Total Tasks.
-* Tasks by Status.
-* Pending Approvals.
-* Leave Requests.
-* Completed Tasks.
-* Task Distribution Analytics.
-* Role-Based Dashboard Summary.
-
-
-# Project Structure
-
-```text
-STACKLY-Mini-Enterprise/
-│
-├── mini-enterprise-backend/
-│   ├── app/
-│   │   ├── core/
-│   │   ├── models/
-│   │   ├── routers/
-│   │   ├── schemas/
-│   │   ├── services/
-│   │   └── main.py
-│   │
-│   ├── alembic/
-│   ├── requirements.txt
-│   └── README.md
-│
-├── mini-enterprise-frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── services/
-│   │   ├── utils/
-│   │   └── App.jsx
-│   │
-│   ├── public/
-│   ├── package.json
-│   └── vite.config.js
-│
-└── README.md
-```
-
-
-
-# API Modules
-
-## Authentication APIs
-
-| Method | Endpoint         | Description            |
-| ------ | ---------------- | ---------------------- |
-| POST   | `/auth/register` | Register User          |
-| POST   | `/auth/login`    | Login User             |
-| GET    | `/auth/me`       | Current Logged-in User |
-
-## User APIs
-
-| Method | Endpoint      | Description  |
-| ------ | ------------- | ------------ |
-| GET    | `/users`      | List Users   |
-| GET    | `/users/{id}` | User Details |
-| POST   | `/users`      | Create User  |
-| PUT    | `/users/{id}` | Update User  |
-| DELETE | `/users/{id}` | Delete User  |
-
-## Task APIs
-
-| Method | Endpoint             | Description            |
-| ------ | -------------------- | ---------------------- |
-| GET    | `/tasks`             | List Tasks             |
-| GET    | `/tasks/{id}`        | Task Details           |
-| POST   | `/tasks`             | Create Task            |
-| PUT    | `/tasks/{id}`        | Update Task            |
-| DELETE | `/tasks/{id}`        | Delete Task            |
-| PATCH  | `/tasks/{id}/status` | Update Workflow Status |
-
-## Kanban APIs
-
-| Method | Endpoint             | Description               |
-| ------ | -------------------- | ------------------------- |
-| GET    | `/tasks/kanban`      | Kanban Board              |
-| PATCH  | `/tasks/{id}/status` | Drag & Drop Status Update |
-
-## Comment APIs
-
-| Method | Endpoint               | Description   |
-| ------ | ---------------------- | ------------- |
-| GET    | `/tasks/{id}/comments` | View Comments |
-| POST   | `/tasks/{id}/comments` | Add Comment   |
-
-## Approval APIs
-
-| Method | Endpoint                  | Description             |
-| ------ | ------------------------- | ----------------------- |
-| POST   | `/approvals`              | Submit Approval Request |
-| GET    | `/approvals`              | View Requests           |
-| PATCH  | `/approvals/{id}/action`  | Approve / Reject / Hold |
-| GET    | `/approvals/{id}/history` | Approval History        |
-
-## Leave APIs
-
-| Method | Endpoint      | Description         |
-| ------ | ------------- | ------------------- |
-| POST   | `/leave`      | Apply Leave         |
-| GET    | `/leave`      | View Leave Requests |
-| PATCH  | `/leave/{id}` | Update Leave Status |
-
-## Dashboard APIs
-
-| Method | Endpoint                       | Description                 |
-| ------ | ------------------------------ | --------------------------- |
-| GET    | `/dashboard/summary`           | Dashboard Summary           |
-| GET    | `/dashboard/task-distribution` | Task Distribution Analytics |
-
-
-# Role-Based Access Control
-
-| Feature                 |  Admin |      Manager     |     Employee     |
-| ----------------------- | :----: | :--------------: | :--------------: |
-| View Users              |   All |     Employees   |         no        |
-| Create User             |    yes   |         no        |         no       |
-| Update User             |    yes   |         no        |         no        |
-| Delete User             |    yes   |         no        |         no        |
-| Create Task             |    yes   |                 |         no       |
-| Assign Task             |    yes   |  Employees Only |         no        |
-| Update Task             |    yes   |     Own Tasks   |    Status Only  |
-| Delete Task             |    yes   |     Own Tasks   |         no        |
-| View Tasks              |   All |   Created Tasks |  Assigned Tasks |
-| Kanban Board            |   All |    Team Tasks   |  Assigned Tasks |
-| Add Comments            |    yes   |         yes        |         yes        |
-| Internal Comments       |    yes   |         yes        |         no        |
-| Submit Approval Request |    no   |         no        |         yes        |
-| Approve / Hold / Reject |    yes   |         yes        |         no        |
-| Dashboard Analytics     | Full |       Team      |     Personal    |
-
----
-
-# Database Models
-
-## User
-
-* id
-* name
-* email
-* hashed_password
-* role
-* is_active
-* created_at
-* updated_at
-
-## Task
-
-* id
-* title
-* description
-* status
-* priority
-* due_date
-* created_by_id
-* assigned_to_id
-* created_at
-* updated_at
-
-## Comment
-
-* id
-* task_id
-* user_id
-* content
-* is_internal
-* created_at
-
-## Approval
-
-* id
-* title
-* description
-* requested_by
-* approver_id
-* status
-* current_level
-* created_at
-
-## Approval History
-
-* id
-* approval_id
-* action_by
-* action
-* comment
-* created_at
-
-## Leave Request
-
-* id
-* employee_id
-* manager_id
-* reason
-* start_date
-* end_date
-* status
-* created_at
-
----
-
-# Business Rules
-
-## Workflow Rules
-
-* Tasks follow **TODO → IN_PROGRESS → REVIEW → DONE** lifecycle.
-* Invalid workflow transitions are blocked.
-
-## Approval Rules
-
-* Employee submits approval request.
-* Manager reviews the request.
-* Admin gives final approval when required.
-* Rejection requires comments.
-* Complete approval history is maintained.
-
-## Comment Rules
-
-* All comments are linked to tasks.
-* Internal comments are visible only to Admin and Manager.
-* Public comments are visible to authorized users.
-
----
-
-# Security Features
-
-* JWT Authentication.
-* Password Hashing (bcrypt).
-* Protected APIs using FastAPI Dependencies.
-* Role-Based Authorization.
-* Secure Request Validation using Pydantic.
-
----
-
-# How to Run the Project
-
-## Backend
-
-1. Install dependencies.
-2. Configure MySQL database.
-3. Run FastAPI application.
-4. Test APIs using Swagger UI.
-
-## Frontend
-
-1. Install dependencies.
-2. Start Vite development server.
-3. Login using Admin / Manager / Employee credentials.
-
----
-
-# Testing
-
-Backend APIs tested using:
-
-* Swagger UI
-* Postman
-
-Frontend testing completed for:
-
-* Authentication
-* User Management
-* Task Management
-* Kanban Workflow
-* Comments Module
-* Approval Workflow
-* Leave Requests
-* Dashboard Analytics
-* Protected Routes
-
----
-
-# Screenshots
-
-## Backend
-
-* Swagger Authentication APIs
-* User APIs
-* Task APIs
-* Kanban APIs
-* Approval APIs
-* Comment APIs
-* Dashboard APIs
-
-## Frontend
-
-* Login Page
-* Register Page
-* Dashboard
-* User Management
-* Task Management
-* Kanban Board
-* Approval Module
-* Leave Requests
-* Comments Module
-
----
-
-# Project Status
-
-## Phase 1 Status
-
-* JWT Authentication – Completed.
-* Role-Based Access Control – Completed.
-* User CRUD – Completed.
-* Task CRUD – Completed.
-* Task Assignment – Completed.
-* Dashboard – Completed.
-* Frontend & Backend Integration – Completed.
-
-## Phase 2 Status
-
-* Kanban Workflow System – Completed.
-* Workflow Validation Rules – Completed.
-* Comments & Collaboration Module – Completed.
-* Approval Workflow Module – Completed.
-* Approval History Tracking – Completed.
-* Leave Request Module – Completed.
-* Dashboard Analytics – Completed.
-* Role-Based Dashboard Enhancements – Completed.
-* Frontend & Backend Integration – Completed.
-
----
-
+Admin
+ ├── Manage Users
+ ├── Manage Tasks
+ └── Assign Tasks
+
+Manager
+ ├── Create Tasks
+ ├── Assign Tasks
+ └── Manage Team Tasks
+
+Employee
+ ├── View Assigned Tasks
+ └── Update Task Status
