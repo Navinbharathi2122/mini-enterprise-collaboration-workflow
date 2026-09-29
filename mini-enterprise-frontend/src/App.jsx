@@ -7,6 +7,8 @@ import Tasks from "./pages/Tasks";
 import Kanban from "./pages/Kanban";
 import Approvals from "./pages/Approvals";
 import LeaveRequests from "./pages/LeaveRequests";
+import Notifications from "./pages/Notifications";
+import AuditLogs from "./pages/AuditLogs";
 
 import { getUserFromToken } from "./utils/jwt";
 
@@ -96,6 +98,24 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+  path="/notifications"
+  element={
+    <ProtectedRoute>
+      <Notifications />
+    </ProtectedRoute>
+  }
+/>
+
+
+<Route
+  path="/audit-logs"
+  element={
+    <ProtectedRoute>
+      <AuditLogs />
+    </ProtectedRoute>
+  }
+/>
 
        
         <Route path="*" element={<Navigate to="/" replace />} />

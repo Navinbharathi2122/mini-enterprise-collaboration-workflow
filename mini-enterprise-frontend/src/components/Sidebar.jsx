@@ -17,8 +17,9 @@ function Sidebar() {
   const normalMenu = "text-slate-300 hover:bg-slate-800 hover:text-white";
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-slate-800 bg-slate-950">
-      <div className="border-b border-slate-800 px-6 py-7">
+    <aside className="sticky left-0 top-0 z-50 flex h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-slate-800 bg-slate-950">
+      {/* ================= LOGO ================= */}
+      <div className="shrink-0 border-b border-slate-800 px-6 py-7">
         <h1 className="text-3xl font-extrabold tracking-wide text-white">
           STACKLY
         </h1>
@@ -28,13 +29,14 @@ function Sidebar() {
         </p>
       </div>
 
-      <div className="border-b border-slate-800 px-6 py-5">
+      {/* ================= USER INFO ================= */}
+      <div className="shrink-0 border-b border-slate-800 px-6 py-5">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-700 text-lg font-bold text-white">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-700 text-lg font-bold text-white">
             {user?.name?.charAt(0)?.toUpperCase() || "U"}
           </div>
 
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h3 className="truncate text-sm font-semibold text-white">
               {user?.name || "Guest User"}
             </h3>
@@ -54,11 +56,13 @@ function Sidebar() {
               : "bg-orange-100 text-orange-700"
           }`}
         >
-          {user?.role}
+          {user?.role || "employee"}
         </span>
       </div>
 
-      <nav className="flex-1 space-y-2 px-4 py-6">
+      {/* ================= MENU ================= */}
+      <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-6">
+        {/* Dashboard */}
         <NavLink
           to="/dashboard"
           className={({ isActive }) =>
@@ -69,6 +73,7 @@ function Sidebar() {
           Dashboard
         </NavLink>
 
+        {/* Users */}
         {(user?.role === "admin" || user?.role === "manager") && (
           <NavLink
             to="/users"
@@ -81,6 +86,7 @@ function Sidebar() {
           </NavLink>
         )}
 
+        {/* Tasks */}
         <NavLink
           to="/tasks"
           className={({ isActive }) =>
@@ -91,6 +97,7 @@ function Sidebar() {
           Tasks
         </NavLink>
 
+        {/* Kanban */}
         <NavLink
           to="/kanban"
           className={({ isActive }) =>
@@ -101,6 +108,7 @@ function Sidebar() {
           Kanban Board
         </NavLink>
 
+        {/* Approvals */}
         <NavLink
           to="/approvals"
           className={({ isActive }) =>
@@ -111,7 +119,7 @@ function Sidebar() {
           Approvals
         </NavLink>
 
-        
+        {/* Leave Requests */}
         <NavLink
           to="/leave-requests"
           className={({ isActive }) =>
@@ -121,9 +129,34 @@ function Sidebar() {
           <span className="text-lg">🌴</span>
           Leave Requests
         </NavLink>
+
+        {/* Notifications */}
+        <NavLink
+          to="/notifications"
+          className={({ isActive }) =>
+            `${menuItem} ${isActive ? activeMenu : normalMenu}`
+          }
+        >
+          <span className="text-lg">🔔</span>
+          Notifications
+        </NavLink>
+
+        {/* Audit Logs */}
+        {(user?.role === "admin" || user?.role === "manager") && (
+          <NavLink
+            to="/audit-logs"
+            className={({ isActive }) =>
+              `${menuItem} ${isActive ? activeMenu : normalMenu}`
+            }
+          >
+            <span className="text-lg">📜</span>
+            Audit Logs
+          </NavLink>
+        )}
       </nav>
 
-      <div className="border-t border-slate-800 p-4">
+      {/* ================= LOGOUT ================= */}
+      <div className="shrink-0 border-t border-slate-800 p-4">
         <button
           onClick={logout}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500 px-4 py-3 text-sm font-semibold text-red-400 transition-all duration-200 hover:bg-red-600 hover:text-white"

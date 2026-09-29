@@ -9,9 +9,14 @@ export const getUserFromToken = () => {
     return {
       id: Number(payload.sub),
       email: payload.email,
-      role: payload.role,
+
+      // FIX: always convert role to lowercase and remove spaces
+      role: (payload.role || "").toString().trim().toLowerCase(),
+
+      name: payload.name || payload.full_name || "",
     };
   } catch (err) {
+    console.error("JWT Decode Error:", err);
     localStorage.removeItem("access_token");
     return null;
   }

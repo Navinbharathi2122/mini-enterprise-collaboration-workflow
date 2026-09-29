@@ -1,0 +1,92 @@
+
+
+.task-chart-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  margin-top: 20px;
+}
+
+.task-chart-header h3 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 22px;
+}
+
+.task-chart-header p {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.task-chart-body {
+  margin-top: 22px;
+}
+
+.task-chart-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 45px;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.task-chart-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.task-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.task-chart-progress {
+  width: 100%;
+  height: 12px;
+  background: #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.task-chart-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.4s ease-in-out;
+}
+
+.task-chart-value {
+  text-align: center;
+  font-weight: bold;
+  color: #0f172a;
+}
+
+.task-chart-footer {
+  margin-top: 20px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 15px;
+  color: #334155;
+  font-size: 15px;
+}
+
+/* Responsive */
+
+@media (max-width: 768px) {
+  .task-chart-row {
+    grid-template-columns: 110px 1fr 35px;
+    gap: 10px;
+  }
+
+  .task-chart-header h3 {
+    font-size: 18px;
+  }
+
+  .task-chart-label {
+    font-size: 13px;
+  }
+}

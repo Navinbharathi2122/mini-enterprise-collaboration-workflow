@@ -24,24 +24,41 @@ function LeaveActionModal({
     resume: "bg-blue-600 hover:bg-blue-700",
   };
 
+  // ================= SUBMIT ACTION =================
+
   const handleSubmit = async () => {
     try {
       setLoading(true);
 
-      await takeLeaveAction(leave.id, {
+      const response = await takeLeaveAction(leave.id, {
         action: actionType,
-        comment,
+        comment: comment.trim(),
       });
 
-      await refreshLeaveRequests();
+      console.log("Leave Action Success:", response);
+
+      // Refresh leave requests table
+      if (refreshLeaveRequests) {
+        await refreshLeaveRequests();
+      }
+
+      // Close modal
       closeModal();
     } catch (error) {
-      console.error("Leave action failed:", error);
-      alert("Failed to update leave request.");
+      console.error("Leave Action Error:", error);
+
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        "Leave action failed.";
+
+      alert(message);
     } finally {
       setLoading(false);
     }
   };
+
+  // ================= UI =================
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -51,11 +68,17 @@ function LeaveActionModal({
         </h2>
 
         <p className="mt-2 text-sm text-slate-500">
-          Employee: <span className="font-semibold">{leave.requested_by_name}</span>
+          Employee:{" "}
+          <span className="font-semibold">
+            {leave.requested_by_name}
+          </span>
         </p>
 
         <p className="text-sm text-slate-500">
-          Leave Type: <span className="font-semibold">{leave.leave_type}</span>
+          Leave Type:{" "}
+          <span className="font-semibold">
+            {leave.leave_type}
+          </span>
         </p>
 
         <p className="text-sm text-slate-500">
@@ -79,7 +102,8 @@ function LeaveActionModal({
         <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={closeModal}
-            className="rounded-xl border border-slate-300 px-5 py-2 font-medium text-slate-700"
+            disabled={loading}
+            className="rounded-xl border border-slate-300 px-5 py-2 font-medium text-slate-700 hover:bg-slate-100"
           >
             Cancel
           </button>

@@ -23,11 +23,17 @@ import {
 } from "recharts";
 
 function Approvals() {
-  const currentUser = getUserFromToken();
+const currentUser = getUserFromToken();
 
-  const isAdmin = currentUser?.role === "admin";
-  const isManager = currentUser?.role === "manager";
-  const isEmployee = currentUser?.role === "employee";
+// Normalize role from JWT
+const userRole = (currentUser?.role || "").trim().toLowerCase();
+
+console.log("Current User:", currentUser);
+console.log("User Role:", userRole);
+
+const isAdmin = userRole === "admin";
+const isManager = userRole === "manager";
+const isEmployee = userRole === "employee";
 
   const [approvals, setApprovals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,20 +55,27 @@ function Approvals() {
   const fetchApprovals = async () => {
     try {
       setLoading(true);
+
       const data = await getAllApprovals();
-      setApprovals(data);
+      setApprovals(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error(error);
+      console.error("Approval Fetch Error:", error);
+      setApprovals([]);
     } finally {
       setLoading(false);
     }
   };
 
+  /* ================= SEARCH FILTER ================= */
+
   const filteredApprovals = useMemo(() => {
     return approvals.filter((approval) => {
-      const titleMatch = approval.title
-        .toLowerCase()
-        .includes(search.toLowerCase());
+      const keyword = search.toLowerCase();
+
+      const titleMatch =
+        approval.title?.toLowerCase().includes(keyword) ||
+        approval.description?.toLowerCase().includes(keyword) ||
+        approval.requested_by_name?.toLowerCase().includes(keyword);
 
       const statusMatch =
         statusFilter === "all"
@@ -73,15 +86,45 @@ function Approvals() {
     });
   }, [approvals, search, statusFilter]);
 
+  /* ================= DASHBOARD ================= */
+
   const dashboard = useMemo(() => {
     return {
       total: approvals.length,
-      pending: approvals.filter((a) => a.status === "pending").length,
-      hold: approvals.filter((a) => a.status === "hold").length,
-      approved: approvals.filter((a) => a.status === "approved").length,
-      rejected: approvals.filter((a) => a.status === "rejected").length,
+
+      pending: approvals.filter(
+        (a) => a.status === "pending"
+      ).length,
+
+      hold: approvals.filter(
+        (a) => a.status === "hold"
+      ).length,
+
+      approved: approvals.filter(
+        (a) =>
+          a.status === "approved" ||
+          a.status === "manager_approved"
+      ).length,
+
+      rejected: approvals.filter(
+        (a) => a.status === "rejected"
+      ).length,
+
+      managerReview: approvals.filter(
+        (a) =>
+          a.current_level === "manager" &&
+          a.status === "pending"
+      ).length,
+
+      adminReview: approvals.filter(
+        (a) =>
+          a.current_level === "admin" &&
+          a.status === "manager_approved"
+      ).length,
     };
   }, [approvals]);
+
+  /* ================= ANALYTICS ================= */
 
   const analytics = useMemo(() => {
     const total = dashboard.total || 1;
@@ -90,76 +133,167 @@ function Approvals() {
       completionRate: Math.round(
         ((dashboard.approved + dashboard.rejected) / total) * 100
       ),
-      approvalRate: Math.round((dashboard.approved / total) * 100),
-      pendingRate: Math.round((dashboard.pending / total) * 100),
-      holdRate: Math.round((dashboard.hold / total) * 100),
-      rejectionRate: Math.round((dashboard.rejected / total) * 100),
+
+      approvalRate: Math.round(
+        (dashboard.approved / total) * 100
+      ),
+
+      pendingRate: Math.round(
+        (dashboard.pending / total) * 100
+      ),
+
+      holdRate: Math.round(
+        (dashboard.hold / total) * 100
+      ),
+
+      rejectionRate: Math.round(
+        (dashboard.rejected / total) * 100
+      ),
     };
   }, [dashboard]);
 
+  /* ================= PIE DATA ================= */
+
   const pieData = [
-    { name: "Approved", value: dashboard.approved, color: "#16a34a" },
-    { name: "Pending", value: dashboard.pending, color: "#f59e0b" },
-    { name: "Hold", value: dashboard.hold, color: "#9333ea" },
-    { name: "Rejected", value: dashboard.rejected, color: "#dc2626" },
+    {
+      name: "Approved",
+      value: dashboard.approved,
+      color: "#16A34A",
+    },
+    {
+      name: "Pending",
+      value: dashboard.pending,
+      color: "#F59E0B",
+    },
+    {
+      name: "Hold",
+      value: dashboard.hold,
+      color: "#9333EA",
+    },
+    {
+      name: "Rejected",
+      value: dashboard.rejected,
+      color: "#DC2626",
+    },
   ];
 
-  const trendData = useMemo(() => {
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  /* ================= MONTHLY TREND ================= */
 
-    const map = {};
+  const trendData = useMemo(() => {
+    const months = [
+      "Jan","Feb","Mar","Apr","May","Jun",
+      "Jul","Aug","Sep","Oct","Nov","Dec",
+    ];
+
+    const monthlyMap = {};
 
     approvals.forEach((item) => {
-      const date = new Date(item.created_at);
-      const month = months[date.getMonth()];
-      map[month] = (map[month] || 0) + 1;
+      if (!item.created_at) return;
+
+      const month = months[new Date(item.created_at).getMonth()];
+      monthlyMap[month] = (monthlyMap[month] || 0) + 1;
     });
 
     return months.map((month) => ({
       month,
-      requests: map[month] || 0,
+      requests: monthlyMap[month] || 0,
     }));
   }, [approvals]);
+
+  /* ================= RECENT ACTIVITY ================= */
 
   const recentActivities = useMemo(() => {
     return [...approvals]
       .sort(
         (a, b) =>
-          new Date(b.created_at) - new Date(a.created_at)
+          new Date(b.created_at) -
+          new Date(a.created_at)
       )
       .slice(0, 5);
   }, [approvals]);
+
+  /* ================= STATUS BADGE ================= */
 
   const getStatusBadge = (status) => {
     switch (status) {
       case "approved":
         return "bg-green-100 text-green-700";
+
+      case "manager_approved":
+        return "bg-emerald-100 text-emerald-700";
+
       case "pending":
         return "bg-yellow-100 text-yellow-700";
+
       case "hold":
         return "bg-purple-100 text-purple-700";
+
       case "rejected":
         return "bg-red-100 text-red-700";
+
       default:
         return "bg-slate-100 text-slate-700";
     }
   };
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case "approved":
+        return "Approved";
+
+      case "manager_approved":
+        return "Manager Approved";
+
+      case "pending":
+        return "Pending";
+
+      case "hold":
+        return "On Hold";
+
+      case "rejected":
+        return "Rejected";
+
+      default:
+        return status;
+    }
+  };
+
+  /* ================= LEVEL BADGE ================= */
 
   const getLevelBadge = (level) => {
     switch (level) {
       case "manager":
         return "bg-blue-100 text-blue-700";
+
       case "admin":
         return "bg-indigo-100 text-indigo-700";
+
       case "completed":
         return "bg-green-100 text-green-700";
+
       default:
         return "bg-slate-100 text-slate-700";
     }
   };
 
+  const getLevelText = (level) => {
+    switch (level) {
+      case "manager":
+        return "Manager Review";
+
+      case "admin":
+        return "Admin Review";
+
+      case "completed":
+        return "Completed";
+
+      default:
+        return level;
+    }
+  };
+
   return (
-    <div className="flex min-h-screen bg-slate-100">
+        <div className="flex min-h-screen bg-slate-100">
       <Sidebar />
 
       <div className="flex flex-1 flex-col">
@@ -167,7 +301,7 @@ function Approvals() {
 
         <main className="flex-1 overflow-y-auto p-8">
 
-          {/* Header */}
+          {/* ================= HEADER ================= */}
 
           <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -190,16 +324,14 @@ function Approvals() {
             )}
           </div>
 
-          {/* Enterprise Dashboard Cards */}
+          {/* ================= ENTERPRISE DASHBOARD CARDS ================= */}
 
           <div className="mb-8 grid gap-5 lg:grid-cols-5">
 
             <div className="rounded-3xl bg-gradient-to-br from-blue-600 to-blue-800 p-5 text-white shadow-xl">
               <p className="text-sm text-blue-100">TOTAL REQUESTS</p>
 
-              <h2 className="mt-3 text-4xl font-bold">
-                {dashboard.total}
-              </h2>
+              <h2 className="mt-3 text-4xl font-bold">{dashboard.total}</h2>
 
               <p className="mt-4 text-xs text-blue-100">
                 Company approval requests.
@@ -209,9 +341,7 @@ function Approvals() {
             <div className="rounded-3xl bg-gradient-to-br from-yellow-400 to-orange-500 p-5 text-white shadow-xl">
               <p className="text-sm text-yellow-50">PENDING</p>
 
-              <h2 className="mt-3 text-4xl font-bold">
-                {dashboard.pending}
-              </h2>
+              <h2 className="mt-3 text-4xl font-bold">{dashboard.pending}</h2>
 
               <p className="mt-4 text-xs text-yellow-50">
                 Waiting for review.
@@ -221,9 +351,7 @@ function Approvals() {
             <div className="rounded-3xl bg-gradient-to-br from-purple-500 to-violet-700 p-5 text-white shadow-xl">
               <p className="text-sm text-purple-100">ON HOLD</p>
 
-              <h2 className="mt-3 text-4xl font-bold">
-                {dashboard.hold}
-              </h2>
+              <h2 className="mt-3 text-4xl font-bold">{dashboard.hold}</h2>
 
               <p className="mt-4 text-xs text-purple-100">
                 Need more information.
@@ -233,9 +361,7 @@ function Approvals() {
             <div className="rounded-3xl bg-gradient-to-br from-green-500 to-emerald-700 p-5 text-white shadow-xl">
               <p className="text-sm text-green-100">APPROVED</p>
 
-              <h2 className="mt-3 text-4xl font-bold">
-                {dashboard.approved}
-              </h2>
+              <h2 className="mt-3 text-4xl font-bold">{dashboard.approved}</h2>
 
               <p className="mt-4 text-xs text-green-100">
                 Successfully completed.
@@ -245,9 +371,7 @@ function Approvals() {
             <div className="rounded-3xl bg-gradient-to-br from-red-500 to-red-700 p-5 text-white shadow-xl">
               <p className="text-sm text-red-100">REJECTED</p>
 
-              <h2 className="mt-3 text-4xl font-bold">
-                {dashboard.rejected}
-              </h2>
+              <h2 className="mt-3 text-4xl font-bold">{dashboard.rejected}</h2>
 
               <p className="mt-4 text-xs text-red-100">
                 Needs correction.
@@ -256,7 +380,7 @@ function Approvals() {
 
           </div>
 
-          {/* Progress Analytics */}
+          {/* ================= PROGRESS ANALYTICS ================= */}
 
           <div className="mb-8 grid gap-6 lg:grid-cols-2">
 
@@ -287,7 +411,7 @@ function Approvals() {
                     <div
                       className={`h-full rounded-full ${bar}`}
                       style={{ width: `${value}%` }}
-                    ></div>
+                    />
                   </div>
                 </div>
               ))}
@@ -300,9 +424,10 @@ function Approvals() {
 
               <div className="space-y-4">
 
-                <div className="rounded-xl bg-green-50 p-4 flex justify-between items-center">
+                <div className="flex items-center justify-between rounded-xl bg-green-50 p-4">
                   <div>
                     <p className="text-sm text-green-700">Approval Rate</p>
+
                     <h3 className="text-2xl font-bold text-green-700">
                       {analytics.approvalRate}%
                     </h3>
@@ -311,9 +436,10 @@ function Approvals() {
                   <span className="text-3xl">✅</span>
                 </div>
 
-                <div className="rounded-xl bg-yellow-50 p-4 flex justify-between items-center">
+                <div className="flex items-center justify-between rounded-xl bg-yellow-50 p-4">
                   <div>
                     <p className="text-sm text-yellow-700">Pending Rate</p>
+
                     <h3 className="text-2xl font-bold text-yellow-700">
                       {analytics.pendingRate}%
                     </h3>
@@ -322,9 +448,10 @@ function Approvals() {
                   <span className="text-3xl">⏳</span>
                 </div>
 
-                <div className="rounded-xl bg-purple-50 p-4 flex justify-between items-center">
+                <div className="flex items-center justify-between rounded-xl bg-purple-50 p-4">
                   <div>
                     <p className="text-sm text-purple-700">Hold Rate</p>
+
                     <h3 className="text-2xl font-bold text-purple-700">
                       {analytics.holdRate}%
                     </h3>
@@ -333,9 +460,10 @@ function Approvals() {
                   <span className="text-3xl">⏸️</span>
                 </div>
 
-                <div className="rounded-xl bg-red-50 p-4 flex justify-between items-center">
+                <div className="flex items-center justify-between rounded-xl bg-red-50 p-4">
                   <div>
                     <p className="text-sm text-red-700">Rejection Rate</p>
+
                     <h3 className="text-2xl font-bold text-red-700">
                       {analytics.rejectionRate}%
                     </h3>
@@ -349,13 +477,14 @@ function Approvals() {
 
           </div>
 
-          {/* Search & Filter */}
+          {/* ================= SEARCH & FILTER ================= */}
 
           <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row">
+
               <input
                 type="text"
-                placeholder="Search approval title..."
+                placeholder="Search approval title, employee or description..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="flex-1 rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 outline-none focus:border-blue-600"
@@ -368,451 +497,138 @@ function Approvals() {
               >
                 <option value="all">All Status</option>
                 <option value="pending">Pending</option>
+                <option value="manager_approved">Manager Approved</option>
                 <option value="hold">Hold</option>
                 <option value="approved">Approved</option>
                 <option value="rejected">Rejected</option>
               </select>
+
             </div>
           </div>
-         
 
-<div className="mb-8 grid gap-6 lg:grid-cols-2">
+          {/* ================= PIE CHART + TREND ================= */}
 
-  
+          <div className="mb-8 grid gap-6 lg:grid-cols-2">
 
-  <div className="rounded-3xl bg-white p-6 shadow-md">
-    <div className="mb-5 flex items-center justify-between">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">
-          Approval Status Distribution
-        </h2>
-        <p className="text-sm text-slate-500">
-          Live approval status breakdown.
-        </p>
-      </div>
-    </div>
+            <div className="rounded-3xl bg-white p-6 shadow-md">
+              <div className="mb-5">
+                <h2 className="text-xl font-bold text-slate-900">
+                  Approval Status Distribution
+                </h2>
 
-    <div className="h-72">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={pieData}
-            dataKey="value"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            outerRadius={90}
-            innerRadius={55}
-            paddingAngle={3}
-          >
-            {pieData.map((entry, index) => (
-              <Cell key={index} fill={entry.color} />
-            ))}
-          </Pie>
+                <p className="text-sm text-slate-500">
+                  Live approval status breakdown.
+                </p>
+              </div>
 
-          <Tooltip />
-        </PieChart>
-      </ResponsiveContainer>
-    </div>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      innerRadius={55}
+                      paddingAngle={3}
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={index} fill={entry.color} />
+                      ))}
+                    </Pie>
 
-    <div className="mt-6 grid grid-cols-2 gap-3">
-      {pieData.map((item) => (
-        <div
-          key={item.name}
-          className="flex items-center justify-between rounded-xl border border-slate-200 p-3"
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className="h-3 w-3 rounded-full"
-              style={{ backgroundColor: item.color }}
-            ></span>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
 
-            <span className="text-sm font-medium text-slate-700">
-              {item.name}
-            </span>
-          </div>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                {pieData.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 p-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
 
-          <span className="font-bold text-slate-900">
-            {item.value}
-          </span>
-        </div>
-      ))}
-    </div>
-  </div>
+                      <span className="text-sm font-medium text-slate-700">
+                        {item.name}
+                      </span>
+                    </div>
 
-  
-
-  <div className="rounded-3xl bg-white p-6 shadow-md">
-    <div className="mb-5 flex items-center justify-between">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">
-          Monthly Approval Trend
-        </h2>
-        <p className="text-sm text-slate-500">
-          Requests created month-wise.
-        </p>
-      </div>
-    </div>
-
-    <div className="h-72">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={trendData}>
-          <CartesianGrid strokeDasharray="3 3" />
-
-          <XAxis dataKey="month" />
-
-          <YAxis allowDecimals={false} />
-
-          <Tooltip />
-
-          <Line
-            type="monotone"
-            dataKey="requests"
-            stroke="#2563EB"
-            strokeWidth={3}
-            dot={{ r: 5 }}
-            activeDot={{ r: 8 }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-
-    <div className="mt-5 rounded-2xl bg-blue-50 p-4">
-      <p className="text-sm text-blue-700">
-        Total Requests This Year
-      </p>
-
-      <h3 className="mt-2 text-3xl font-bold text-blue-800">
-        {dashboard.total}
-      </h3>
-
-      <p className="mt-2 text-xs text-blue-600">
-        Trend updates automatically when new approvals are created.
-      </p>
-    </div>
-  </div>
-
-</div>
-{/* ======================= DAY 3.5.3 ======================= */}
-{/* Recent Approval Activity + Manager/Admin Analytics */}
-
-<div className="mb-8 grid gap-6 lg:grid-cols-3">
-
-  {/* Recent Activity */}
-
-  <div className="lg:col-span-2 rounded-3xl bg-white p-6 shadow-md">
-    <div className="mb-5 flex items-center justify-between">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">
-          Recent Approval Activity
-        </h2>
-
-        <p className="text-sm text-slate-500">
-          Latest approval requests across the organization.
-        </p>
-      </div>
-
-      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-        Live Updates
-      </span>
-    </div>
-
-    {recentActivities.length === 0 ? (
-      <div className="rounded-2xl border border-dashed border-slate-300 py-12 text-center text-slate-500">
-        No recent approval activity available.
-      </div>
-    ) : (
-      <div className="space-y-5">
-        {recentActivities.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-start gap-4 rounded-2xl border border-slate-200 p-4 transition hover:bg-slate-50"
-          >
-            {/* Avatar */}
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white">
-              {item.requested_by_name?.charAt(0) || "U"}
+                    <span className="font-bold text-slate-900">
+                      {item.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* Details */}
-            <div className="flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-semibold text-slate-900">
-                  {item.requested_by_name || "Employee"}
+            <div className="rounded-3xl bg-white p-6 shadow-md">
+              <div className="mb-5">
+                <h2 className="text-xl font-bold text-slate-900">
+                  Monthly Approval Trend
+                </h2>
+
+                <p className="text-sm text-slate-500">
+                  Requests created month-wise.
+                </p>
+              </div>
+
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+
+                    <XAxis dataKey="month" />
+
+                    <YAxis allowDecimals={false} />
+
+                    <Tooltip />
+
+                    <Line
+                      type="monotone"
+                      dataKey="requests"
+                      stroke="#2563EB"
+                      strokeWidth={3}
+                      dot={{ r: 5 }}
+                      activeDot={{ r: 8 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-5 rounded-2xl bg-blue-50 p-4">
+                <p className="text-sm text-blue-700">
+                  Total Requests This Year
+                </p>
+
+                <h3 className="mt-2 text-3xl font-bold text-blue-800">
+                  {dashboard.total}
                 </h3>
 
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
-                    item.status
-                  )}`}
-                >
-                  {item.status.toUpperCase()}
-                </span>
-              </div>
-
-              <p className="mt-1 font-medium text-slate-700">
-                {item.title}
-              </p>
-
-              <p className="mt-2 line-clamp-2 text-sm text-slate-500">
-                {item.description || "No description provided."}
-              </p>
-
-              <div className="mt-3 flex items-center gap-4 text-xs text-slate-400">
-                <span>
-                  📅{" "}
-                  {new Date(item.created_at).toLocaleDateString("en-GB")}
-                </span>
-
-                <span>
-                  🕒{" "}
-                  {new Date(item.created_at).toLocaleTimeString("en-IN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
+                <p className="mt-2 text-xs text-blue-600">
+                  Trend updates automatically when new approvals are created.
+                </p>
               </div>
             </div>
+
           </div>
-        ))}
-      </div>
-    )}
-  </div>
-
-  {/* Analytics Summary */}
-
-  <div className="rounded-3xl bg-white p-6 shadow-md">
-    <h2 className="mb-5 text-xl font-bold text-slate-900">
-      Dashboard Summary
-    </h2>
-
-    <div className="space-y-4">
-
-      <div className="rounded-2xl bg-blue-50 p-4">
-        <p className="text-sm text-blue-600">Total Requests</p>
-
-        <h2 className="mt-2 text-3xl font-bold text-blue-700">
-          {dashboard.total}
-        </h2>
-
-        <p className="mt-2 text-xs text-blue-500">
-          Overall approval requests.
-        </p>
-      </div>
-
-      <div className="rounded-2xl bg-green-50 p-4">
-        <p className="text-sm text-green-600">Completion Rate</p>
-
-        <h2 className="mt-2 text-3xl font-bold text-green-700">
-          {analytics.completionRate}%
-        </h2>
-
-        <p className="mt-2 text-xs text-green-500">
-          Approved + Rejected requests completed.
-        </p>
-      </div>
-
-      <div className="rounded-2xl bg-yellow-50 p-4">
-        <p className="text-sm text-yellow-600">Pending Review</p>
-
-        <h2 className="mt-2 text-3xl font-bold text-yellow-700">
-          {dashboard.pending}
-        </h2>
-
-        <p className="mt-2 text-xs text-yellow-500">
-          Waiting for Manager/Admin approval.
-        </p>
-      </div>
-
-      <div className="rounded-2xl bg-purple-50 p-4">
-        <p className="text-sm text-purple-600">On Hold</p>
-
-        <h2 className="mt-2 text-3xl font-bold text-purple-700">
-          {dashboard.hold}
-        </h2>
-
-        <p className="mt-2 text-xs text-purple-500">
-          Requests waiting for clarification.
-        </p>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-
-
-{(isManager || isAdmin) && (
-  <div className="mb-8 rounded-3xl bg-white p-6 shadow-md">
-    <div className="mb-6 flex items-center justify-between">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900">
-          {isAdmin ? "Admin Analytics" : "Manager Analytics"}
-        </h2>
-
-        <p className="text-sm text-slate-500">
-          Live approval workflow insights.
-        </p>
-      </div>
-
-      <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
-        {isAdmin ? "Administrator" : "Manager"}
-      </span>
-    </div>
-
-    <div className="grid gap-5 md:grid-cols-4">
-
-      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
-        <p className="text-sm text-blue-600">
-          Waiting for Review
-        </p>
-
-        <h2 className="mt-2 text-3xl font-bold text-blue-700">
-          {dashboard.pending}
-        </h2>
-
-        <p className="mt-2 text-xs text-blue-500">
-          Requests awaiting approval.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border border-green-100 bg-green-50 p-5">
-        <p className="text-sm text-green-600">
-          Approved Requests
-        </p>
-
-        <h2 className="mt-2 text-3xl font-bold text-green-700">
-          {dashboard.approved}
-        </h2>
-
-        <p className="mt-2 text-xs text-green-500">
-          Successfully approved requests.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border border-purple-100 bg-purple-50 p-5">
-        <p className="text-sm text-purple-600">
-          Hold Requests
-        </p>
-
-        <h2 className="mt-2 text-3xl font-bold text-purple-700">
-          {dashboard.hold}
-        </h2>
-
-        <p className="mt-2 text-xs text-purple-500">
-          Waiting for additional information.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border border-red-100 bg-red-50 p-5">
-        <p className="text-sm text-red-600">
-          Rejected Requests
-        </p>
-
-        <h2 className="mt-2 text-3xl font-bold text-red-700">
-          {dashboard.rejected}
-        </h2>
-
-        <p className="mt-2 text-xs text-red-500">
-          Requests rejected during review.
-        </p>
-      </div>
-
-    </div>
-
-    <div className="mt-8 grid gap-5 lg:grid-cols-2">
-
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-        <h3 className="mb-4 text-lg font-semibold text-slate-800">
-          Manager Performance
-        </h3>
-
-        <div className="space-y-3 text-sm">
-
-          <div className="flex justify-between">
-            <span className="text-slate-500">
-              Requests Reviewed
-            </span>
-
-            <span className="font-bold text-slate-900">
-              {dashboard.approved + dashboard.rejected}
-            </span>
-          </div>
-
-          <div className="flex justify-between">
-            <span className="text-slate-500">
-              Approval Success
-            </span>
-
-            <span className="font-bold text-green-600">
-              {analytics.approvalRate}%
-            </span>
-          </div>
-
-          <div className="flex justify-between">
-            <span className="text-slate-500">
-              Hold Percentage
-            </span>
-
-            <span className="font-bold text-purple-600">
-              {analytics.holdRate}%
-            </span>
-          </div>
-
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-        <h3 className="mb-4 text-lg font-semibold text-slate-800">
-          Workflow Health
-        </h3>
-
-        <div className="space-y-3 text-sm">
-
-          <div className="flex justify-between">
-            <span className="text-slate-500">
-              Completion Rate
-            </span>
-
-            <span className="font-bold text-green-600">
-              {analytics.completionRate}%
-            </span>
-          </div>
-
-          <div className="flex justify-between">
-            <span className="text-slate-500">
-              Pending Rate
-            </span>
-
-            <span className="font-bold text-yellow-600">
-              {analytics.pendingRate}%
-            </span>
-          </div>
-
-          <div className="flex justify-between">
-            <span className="text-slate-500">
-              Rejection Rate
-            </span>
-
-            <span className="font-bold text-red-600">
-              {analytics.rejectionRate}%
-            </span>
-          </div>
-
-        </div>
-      </div>
-
-    </div>
-  </div>
-)}
-
+          {/* ================= APPROVAL REQUESTS TABLE ================= */}
 
 <div className="overflow-hidden rounded-3xl bg-white shadow-md">
   <div className="border-b border-slate-200 px-6 py-4">
     <h2 className="text-xl font-bold text-slate-900">
       Approval Requests
     </h2>
+
     <p className="text-sm text-slate-500">
-      Manage employee approval workflow.
+      Enterprise Manager → Admin Approval Workflow
     </p>
   </div>
 
@@ -820,12 +636,11 @@ function Approvals() {
     <table className="min-w-full">
       <thead className="bg-slate-100">
         <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-          <th className="px-6 py-4">ID</th>
-          <th className="px-6 py-4">Approval</th>
-          <th className="px-6 py-4">Requested By</th>
+          <th className="px-6 py-4">Employee</th>
+          <th className="px-6 py-4">Approval Details</th>
           <th className="px-6 py-4">Current Level</th>
           <th className="px-6 py-4">Status</th>
-          <th className="px-6 py-4">Created</th>
+          <th className="px-6 py-4">Requested On</th>
           <th className="px-6 py-4 text-center">Actions</th>
         </tr>
       </thead>
@@ -833,13 +648,13 @@ function Approvals() {
       <tbody className="divide-y divide-slate-200">
         {loading ? (
           <tr>
-            <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
-              Loading approvals...
+            <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+              Loading approval requests...
             </td>
           </tr>
         ) : filteredApprovals.length === 0 ? (
           <tr>
-            <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+            <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
               No approval requests found.
             </td>
           </tr>
@@ -847,64 +662,84 @@ function Approvals() {
           filteredApprovals.map((approval) => (
             <tr key={approval.id} className="transition hover:bg-slate-50">
 
-             
-              <td className="px-6 py-5 font-semibold text-slate-700">
-                #{approval.id}
+              {/* Employee */}
+
+              <td className="px-6 py-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 font-bold text-white">
+                    {approval.requested_by_name?.charAt(0) || "U"}
+                  </div>
+
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {approval.requested_by_name}
+                    </p>
+
+                    <p className="text-xs capitalize text-slate-500">
+                      {approval.requested_by_role || "Employee"}
+                    </p>
+                  </div>
+                </div>
               </td>
 
-              
+              {/* Approval */}
+
               <td className="px-6 py-5">
                 <p className="font-semibold text-slate-900">
                   {approval.title}
                 </p>
 
-                <p className="mt-1 line-clamp-2 text-sm text-slate-500">
-                  {approval.description || "No description available"}
+                <p className="mt-1 max-w-xs text-sm text-slate-500 line-clamp-2">
+                  {approval.description}
                 </p>
               </td>
 
-              
-              <td className="px-6 py-5">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 font-bold text-white">
-                    {approval.requested_by_name?.charAt(0) || "U"}
-                  </div>
+              {/* Current Level */}
 
-                  <div>
-                    <p className="font-medium text-slate-800">
-                      {approval.requested_by_name || "Employee"}
-                    </p>
-
-                    <p className="text-xs text-slate-500">Employee</p>
-                  </div>
-                </div>
-              </td>
-
-              
               <td className="px-6 py-5">
                 <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${getLevelBadge(
-                    approval.current_level
-                  )}`}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                    approval.current_level === "manager"
+                      ? "bg-blue-100 text-blue-700"
+                      : approval.current_level === "admin"
+                      ? "bg-indigo-100 text-indigo-700"
+                      : "bg-green-100 text-green-700"
+                  }`}
                 >
-                  {approval.current_level}
+                  {approval.current_level === "manager"
+                    ? "Manager Review"
+                    : approval.current_level === "admin"
+                    ? "Admin Review"
+                    : "Completed"}
                 </span>
               </td>
 
-              
+              {/* Status */}
+
               <td className="px-6 py-5">
                 <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${getStatusBadge(
-                    approval.status
-                  )}`}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                    approval.status === "approved"
+                      ? "bg-green-100 text-green-700"
+                      : approval.status === "manager_approved"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : approval.status === "pending"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : approval.status === "hold"
+                      ? "bg-purple-100 text-purple-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
                 >
-                  {approval.status}
+                  {approval.status === "manager_approved"
+                    ? "Manager Approved"
+                    : approval.status}
                 </span>
               </td>
 
-             
-              <td className="px-6 py-5 text-sm text-slate-600">
-                <p>
+              {/* Date */}
+
+              <td className="px-6 py-5">
+                <p className="text-sm text-slate-700">
                   {new Date(approval.created_at).toLocaleDateString("en-GB")}
                 </p>
 
@@ -916,172 +751,151 @@ function Approvals() {
                 </p>
               </td>
 
-              
-              <td className="px-6 py-5">
-                <div className="flex flex-wrap justify-center gap-2">
+              {/* ================= ACTION BUTTONS ================= */}
+{/* ================= ACTION BUTTONS ================= */}
 
-                  
-                  {isManager &&
-                    approval.current_level === "manager" &&
-                    approval.status === "pending" && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setSelectedApproval(approval);
-                            setActionType("approve");
-                            setShowActionModal(true);
-                          }}
-                          className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
-                        >
-                          ✅ Approve
-                        </button>
+<td className="px-6 py-5">
+  <div className="flex flex-wrap justify-center gap-2">
 
-                        <button
-                          onClick={() => {
-                            setSelectedApproval(approval);
-                            setActionType("hold");
-                            setShowActionModal(true);
-                          }}
-                          className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700"
-                        >
-                          ⏸ Hold
-                        </button>
+    {/* MANAGER */}
+    {isManager &&
+      approval.current_level === "manager" &&
+      ["pending", "hold"].includes(approval.status) && (
+        <>
+          {approval.status === "hold" && (
+            <button
+              onClick={() => {
+                setSelectedApproval(approval);
+                setActionType("resume");
+                setShowActionModal(true);
+              }}
+              className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+            >
+              ▶ Resume
+            </button>
+          )}
 
-                        <button
-                          onClick={() => {
-                            setSelectedApproval(approval);
-                            setActionType("reject");
-                            setShowActionModal(true);
-                          }}
-                          className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
-                        >
-                          ❌ Reject
-                        </button>
-                      </>
-                    )}
+          <button
+            onClick={() => {
+              setSelectedApproval(approval);
+              setActionType("approve");
+              setShowActionModal(true);
+            }}
+            className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
+          >
+            ✅ Approve
+          </button>
 
-                 
-                  {isManager &&
-                    approval.current_level === "manager" &&
-                    approval.status === "hold" && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setSelectedApproval(approval);
-                            setActionType("resume");
-                            setShowActionModal(true);
-                          }}
-                          className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                        >
-                          ▶ Resume
-                        </button>
+          <button
+            onClick={() => {
+              setSelectedApproval(approval);
+              setActionType("hold");
+              setShowActionModal(true);
+            }}
+            className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700"
+          >
+            ⏸ Hold
+          </button>
 
-                        <button
-                          onClick={() => {
-                            setSelectedApproval(approval);
-                            setActionType("approve");
-                            setShowActionModal(true);
-                          }}
-                          className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
-                        >
-                          ✅ Approve
-                        </button>
+          <button
+            onClick={() => {
+              setSelectedApproval(approval);
+              setActionType("reject");
+              setShowActionModal(true);
+            }}
+            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
+          >
+            ❌ Reject
+          </button>
+        </>
+      )}
 
-                        <button
-                          onClick={() => {
-                            setSelectedApproval(approval);
-                            setActionType("reject");
-                            setShowActionModal(true);
-                          }}
-                          className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
-                        >
-                          ❌ Reject
-                        </button>
-                      </>
-                    )}
+    {/* ADMIN */}
+   {isAdmin &&
+  (
+    (approval.current_level?.toLowerCase() === "manager" &&
+      approval.status?.toLowerCase() === "pending") ||
+    (approval.current_level?.toLowerCase() === "admin" &&
+      ["manager_approved", "hold"].includes(
+        approval.status?.toLowerCase()
+      ))
+  ) && (
+    <>
+      {approval.status?.toLowerCase() === "hold" && (
+        <button
+          onClick={() => {
+            setSelectedApproval(approval);
+            setActionType("resume");
+            setShowActionModal(true);
+          }}
+          className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+        >
+          ▶ Resume
+        </button>
+      )}
 
-                 
-                  {isAdmin &&
-                    approval.current_level === "admin" &&
-                    (approval.status === "pending" ||
-                      approval.status === "hold") && (
-                      <>
-                        {approval.status === "hold" && (
-                          <button
-                            onClick={() => {
-                              setSelectedApproval(approval);
-                              setActionType("resume");
-                              setShowActionModal(true);
-                            }}
-                            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                          >
-                            ▶ Resume
-                          </button>
-                        )}
+      <button
+        onClick={() => {
+          setSelectedApproval(approval);
+          setActionType("approve");
+          setShowActionModal(true);
+        }}
+        className="rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold text-white hover:bg-green-800"
+      >
+        ✅ Final Approve
+      </button>
 
-                        <button
-                          onClick={() => {
-                            setSelectedApproval(approval);
-                            setActionType("approve");
-                            setShowActionModal(true);
-                          }}
-                          className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
-                        >
-                          ✅ Final Approve
-                        </button>
+      <button
+        onClick={() => {
+          setSelectedApproval(approval);
+          setActionType("hold");
+          setShowActionModal(true);
+        }}
+        className="rounded-lg bg-purple-700 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-800"
+      >
+        ⏸ Hold
+      </button>
 
-                        <button
-                          onClick={() => {
-                            setSelectedApproval(approval);
-                            setActionType("hold");
-                            setShowActionModal(true);
-                          }}
-                          className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700"
-                        >
-                          ⏸ Hold
-                        </button>
+      <button
+        onClick={() => {
+          setSelectedApproval(approval);
+          setActionType("reject");
+          setShowActionModal(true);
+        }}
+        className="rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white hover:bg-red-800"
+      >
+        ❌ Reject
+      </button>
+    </>
+)}
+        
 
-                        <button
-                          onClick={() => {
-                            setSelectedApproval(approval);
-                            setActionType("reject");
-                            setShowActionModal(true);
-                          }}
-                          className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
-                        >
-                          ❌ Reject
-                        </button>
-                      </>
-                    )}
+    {/* EMPLOYEE */}
+    {isEmployee &&
+      !["approved", "rejected"].includes(approval.status) && (
+        <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
+          Waiting for Approval
+        </span>
+      )}
 
-                  
-                  {isEmployee && (
-                    <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">
-                      View Only
-                    </span>
-                  )}
+    {["approved", "rejected"].includes(approval.status) && (
+      <span className="rounded-lg bg-green-100 px-3 py-2 text-xs font-semibold text-green-700">
+        Completed
+      </span>
+    )}
 
-                  
-                  {(approval.status === "approved" ||
-                    approval.status === "rejected") && (
-                    <span className="rounded-lg bg-green-50 px-3 py-2 text-xs font-semibold text-green-700">
-                      Completed
-                    </span>
-                  )}
+    <button
+      onClick={() => {
+        setSelectedApproval(approval);
+        setShowHistoryModal(true);
+      }}
+      className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+    >
+      📜 History
+    </button>
 
-                  
-                  <button
-                    onClick={() => {
-                      setSelectedApproval(approval);
-                      setShowHistoryModal(true);
-                    }}
-                    className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                  >
-                    📜 History
-                  </button>
-
-                </div>
-              </td>
+  </div>
+</td>
             </tr>
           ))
         )}
@@ -1089,8 +903,7 @@ function Approvals() {
     </table>
   </div>
 </div>
-
-
+{/* ================= CREATE APPROVAL MODAL ================= */}
 
 {showCreateModal && (
   <CreateApprovalModal
@@ -1098,6 +911,8 @@ function Approvals() {
     refreshApprovals={fetchApprovals}
   />
 )}
+
+{/* ================= APPROVAL ACTION MODAL ================= */}
 
 {showActionModal && selectedApproval && (
   <ApprovalActionModal
@@ -1112,6 +927,8 @@ function Approvals() {
   />
 )}
 
+{/* ================= APPROVAL HISTORY MODAL ================= */}
+
 {showHistoryModal && selectedApproval && (
   <ApprovalHistoryModal
     approval={selectedApproval}
@@ -1121,7 +938,6 @@ function Approvals() {
     }}
   />
 )}
-
         </main>
       </div>
     </div>
@@ -1129,4 +945,3 @@ function Approvals() {
 }
 
 export default Approvals;
-

@@ -4,21 +4,62 @@ from sqlalchemy.orm import Session
 from app.models.approval import Approval
 from app.models.approval_history import ApprovalHistory
 from app.models.user import User
-from app.schemas.approval_schema import ApprovalCreate, ApprovalAction
 
+from app.schemas.approval_schema import (
+    ApprovalCreate,
+    ApprovalAction,
+)
 
-def add_history(db: Session, approval_id: int, action_by_id: int, action: str, comment: str = None):
+# =====================================================
+# CENTRALIZED NOTIFICATION SERVICE
+# =====================================================
+
+from app.services.notification_service import (
+    notify_approval_submission,
+    notify_approval_action,
+)
+
+# =====================================================
+# APPROVAL HISTORY HELPER
+# =====================================================
+
+def add_history(
+    db: Session,
+    approval_id: int,
+    action_by_id: int,
+    action: str,
+    comment: str = None,
+):
     history = ApprovalHistory(
         approval_id=approval_id,
         action_by_id=action_by_id,
         action=action,
         comment=comment,
     )
+
     db.add(history)
     db.commit()
 
 
-def create_approval(db: Session, approval_data: ApprovalCreate, current_user: User):
+# =====================================================
+# CREATE APPROVAL REQUEST
+# =====================================================
+
+def create_approval(
+    db: Session,
+    approval_data: ApprovalCreate,
+    current_user: User,
+):
+    """
+    Employee creates approval request.
+
+    Enterprise Notifications
+    ------------------------
+    Employee  -> Confirmation notification.
+    Managers  -> New approval request.
+    Admins    -> New approval request.
+    """
+
     approval = Approval(
         title=approval_data.title,
         description=approval_data.description,
@@ -31,227 +72,513 @@ def create_approval(db: Session, approval_data: ApprovalCreate, current_user: Us
     db.commit()
     db.refresh(approval)
 
+    # Save approval history
     add_history(
-        db,
-        approval.id,
-        current_user.id,
-        "submitted",
-        "Approval request submitted.",
+        db=db,
+        approval_id=approval.id,
+        action_by_id=current_user.id,
+        action="submitted",
+        comment="Approval request submitted.",
+    )
+
+    # ==========================================
+    # ENTERPRISE NOTIFICATIONS
+    # ==========================================
+
+    notify_approval_submission(
+        db=db,
+        employee=current_user,
+        approval_title=approval.title,
     )
 
     return approval
 
+# =====================================================
+# MANAGER / ADMIN APPROVAL ACTIONS
+# =====================================================
 
-def get_all_approvals(db: Session, current_user: User):
+def take_approval_action(
+    db: Session,
+    approval_id: int,
+    approval_action: ApprovalAction,
+    current_user: User,
+):
+    """
+    Enterprise Approval Workflow
 
-    # ADMIN -> See all approvals
-    if current_user.role == "admin":
-        approvals = (
-            db.query(Approval)
-            .order_by(Approval.created_at.desc())
-            .all()
-        )
+    Employee -> Manager -> Admin
+    """
 
-    # MANAGER -> See Pending + Hold + Manager Approved + Rejected
-    elif current_user.role == "manager":
-
-    # Manager can see ALL approval requests in the company
-     approvals = (
-        db.query(Approval)
-        .order_by(Approval.created_at.desc())
-        .all()
-    )
-
-    # EMPLOYEE -> See only own approvals
-    else:
-        approvals = (
-            db.query(Approval)
-            .filter(Approval.requested_by_id == current_user.id)
-            .order_by(Approval.created_at.desc())
-            .all()
-        )
-
-    # Attach names
-    for approval in approvals:
-        requester = db.query(User).filter(User.id == approval.requested_by_id).first()
-        approver = db.query(User).filter(User.id == approval.approved_by_id).first() if approval.approved_by_id else None
-
-        approval.requested_by_name = requester.name if requester else "Employee"
-        approval.approved_by_name = approver.name if approver else None
-
-    return approvals
-
-
-def get_approval_by_id(db: Session, approval_id: int):
-    approval = db.query(Approval).filter(Approval.id == approval_id).first()
-
-    if not approval:
-        raise HTTPException(status_code=404, detail="Approval request not found.")
-
-    return approval
-
-
-def take_approval_action(db: Session, approval_id: int, approval_action: ApprovalAction, current_user: User):
     approval = get_approval_by_id(db, approval_id)
+    action = approval_action.action.strip().lower()
 
-    action = approval_action.action.lower().strip()
+    if current_user.role.lower() not in ["manager", "admin"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only Manager or Admin can perform approval actions.",
+        )
 
-    if current_user.role not in ["manager", "admin"]:
-        raise HTTPException(status_code=403, detail="Only Manager or Admin can perform approval actions.")
+    employee = (
+        db.query(User)
+        .filter(User.id == approval.requested_by_id)
+        .first()
+    )
 
-    if action not in ["approve", "reject", "hold", "resume"]:
-        raise HTTPException(status_code=400, detail="Invalid action.")
+    # =====================================================
+    # MANAGER WORKFLOW
+    # =====================================================
 
-    if approval.status in ["approved", "rejected"]:
-        raise HTTPException(status_code=400, detail=f"Approval already {approval.status}.")
-
-    # ===================== MANAGER =====================
-    if current_user.role == "manager":
+    if current_user.role.lower() == "manager":
 
         if approval.current_level != "manager":
-            raise HTTPException(status_code=403, detail="Waiting for Admin approval.")
-
-        if action == "hold":
-            approval.status = "hold"
-            approval.approved_by_id = current_user.id
-
-            add_history(
-                db,
-                approval.id,
-                current_user.id,
-                "manager_hold",
-                approval_action.comment or "Approval kept on hold.",
+            raise HTTPException(
+                status_code=400,
+                detail="Already forwarded to Admin."
             )
 
-        elif action == "resume":
-            if approval.status != "hold":
-                raise HTTPException(status_code=400, detail="Only hold requests can be resumed.")
+        # Manager Approve
+        if action == "approve":
 
-            approval.status = "pending"
-
-            add_history(
-                db,
-                approval.id,
-                current_user.id,
-                "manager_resume",
-                approval_action.comment or "Approval resumed.",
-            )
-
-        elif action == "reject":
-            if not approval_action.comment:
-                raise HTTPException(status_code=400, detail="Rejection comment is required.")
-
-            approval.status = "rejected"
-            approval.approved_by_id = current_user.id
-
-            add_history(
-                db,
-                approval.id,
-                current_user.id,
-                "manager_rejected",
-                approval_action.comment,
-            )
-
-        elif action == "approve":
-            # Move request to Admin
             approval.status = "manager_approved"
             approval.current_level = "admin"
-            approval.approved_by_id = current_user.id
 
-            add_history(
-                db,
-                approval.id,
-                current_user.id,
-                "manager_approved",
-                approval_action.comment or "Manager approved request.",
+            history_action = "manager_approved"
+            history_comment = (
+                approval_action.comment
+                or "Manager approved request."
             )
 
-    # ===================== ADMIN =====================
-    elif current_user.role == "admin":
-
-        if approval.current_level != "admin":
-            raise HTTPException(status_code=403, detail="This request is not waiting for Admin approval.")
-
-        if action == "hold":
-            approval.status = "hold"
-            approval.approved_by_id = current_user.id
-
-            add_history(
-                db,
-                approval.id,
-                current_user.id,
-                "admin_hold",
-                approval_action.comment or "Approval kept on hold by Admin.",
-            )
-
-        elif action == "resume":
-            if approval.status != "hold":
-                raise HTTPException(status_code=400, detail="Only hold requests can be resumed.")
-
-            approval.status = "manager_approved"
-
-            add_history(
-                db,
-                approval.id,
-                current_user.id,
-                "admin_resume",
-                approval_action.comment or "Approval resumed by Admin.",
-            )
-
+        # Manager Reject
         elif action == "reject":
-            if not approval_action.comment:
-                raise HTTPException(status_code=400, detail="Rejection comment is required.")
 
             approval.status = "rejected"
-            approval.approved_by_id = current_user.id
+            approval.current_level = "completed"
 
-            add_history(
-                db,
-                approval.id,
-                current_user.id,
-                "admin_rejected",
-                approval_action.comment,
+            history_action = "manager_rejected"
+            history_comment = (
+                approval_action.comment
+                or "Manager rejected request."
             )
 
-        elif action == "approve":
+        # Manager Hold
+        elif action == "hold":
+
+            approval.status = "hold"
+            approval.current_level = "manager"
+
+            history_action = "manager_hold"
+            history_comment = (
+                approval_action.comment
+                or "Manager put request on hold."
+            )
+
+        # Manager Resume
+        elif action == "resume":
+
+            if approval.status != "hold":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only hold requests can be resumed."
+                )
+
+            approval.status = "pending"
+            approval.current_level = "manager"
+
+            history_action = "manager_resume"
+            history_comment = (
+                approval_action.comment
+                or "Manager resumed request."
+            )
+
+        else:
+            raise HTTPException(400, detail="Invalid Manager action.")
+
+    # =====================================================
+    # ADMIN WORKFLOW
+    # =====================================================
+
+    elif current_user.role.lower() == "admin":
+
+        # Admin cannot touch pending manager request
+        if approval.current_level != "admin":
+            raise HTTPException(
+                status_code=400,
+                detail="Waiting for Manager approval first."
+            )
+
+        # Admin can approve only Manager Approved / Hold
+        if approval.status not in ["manager_approved", "hold"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Admin cannot process this request."
+            )
+
+        # Final Approve
+        if action == "approve":
+
             approval.status = "approved"
             approval.current_level = "completed"
-            approval.approved_by_id = current_user.id
 
-            add_history(
-                db,
-                approval.id,
-                current_user.id,
-                "admin_approved",
-                approval_action.comment or "Admin approved request.",
+            history_action = "admin_approved"
+            history_comment = (
+                approval_action.comment
+                or "Admin approved request."
             )
+
+        # Final Reject
+        elif action == "reject":
+
+            approval.status = "rejected"
+            approval.current_level = "completed"
+
+            history_action = "admin_rejected"
+            history_comment = (
+                approval_action.comment
+                or "Admin rejected request."
+            )
+
+        # Hold by Admin
+        elif action == "hold":
+
+            approval.status = "hold"
+            approval.current_level = "admin"
+
+            history_action = "admin_hold"
+            history_comment = (
+                approval_action.comment
+                or "Admin put request on hold."
+            )
+
+        # Resume by Admin
+        elif action == "resume":
+
+            if approval.status != "hold":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only hold requests can be resumed."
+                )
+
+            approval.status = "manager_approved"
+            approval.current_level = "admin"
+
+            history_action = "admin_resume"
+            history_comment = (
+                approval_action.comment
+                or "Admin resumed request."
+            )
+
+        else:
+            raise HTTPException(400, detail="Invalid Admin action.")
+
+    # =====================================================
+    # SAVE
+    # =====================================================
+
+    approval.approved_by_id = current_user.id
 
     db.commit()
     db.refresh(approval)
 
-    requester = db.query(User).filter(User.id == approval.requested_by_id).first()
-    approver = db.query(User).filter(User.id == approval.approved_by_id).first() if approval.approved_by_id else None
+    add_history(
+        db=db,
+        approval_id=approval.id,
+        action_by_id=current_user.id,
+        action=history_action,
+        comment=history_comment,
+    )
+
+    notify_approval_action(
+        db=db,
+        employee=employee,
+        action_by=current_user,
+        approval_title=approval.title,
+        action=action,
+    )
+
+    requester = (
+        db.query(User)
+        .filter(User.id == approval.requested_by_id)
+        .first()
+    )
+
+    approver = (
+        db.query(User)
+        .filter(User.id == approval.approved_by_id)
+        .first()
+    )
 
     approval.requested_by_name = requester.name if requester else "Employee"
     approval.approved_by_name = approver.name if approver else None
 
     return approval
+    # ==========================================
+    # ENTERPRISE NOTIFICATIONS
+    # ==========================================
+
+    notify_approval_action(
+        db=db,
+        employee=employee,
+        action_by=current_user,
+        approval_title=approval.title,
+        action=action,
+    )
+
+    requester = (
+        db.query(User)
+        .filter(User.id == approval.requested_by_id)
+        .first()
+    )
+
+    approver = (
+        db.query(User)
+        .filter(User.id == approval.approved_by_id)
+        .first()
+    )
+
+    approval.requested_by_name = requester.name if requester else "Employee"
+    approval.approved_by_name = approver.name if approver else None
+
+    return approval
+# =====================================================
+# GET ALL APPROVAL REQUESTS
+# =====================================================
+
+def get_all_approvals(db: Session, current_user: User):
+
+    role = (current_user.role or "").strip().lower()
+
+    query = db.query(Approval)
+
+    if role == "employee":
+        query = query.filter(
+            Approval.requested_by_id == current_user.id
+        )
+
+    approvals = query.order_by(
+        Approval.created_at.desc()
+    ).all()
+
+    for approval in approvals:
+     requester = (
+        db.query(User)
+        .filter(User.id == approval.requested_by_id)
+        .first()
+    )
+
+    approver = (
+        db.query(User)
+        .filter(User.id == approval.approved_by_id)
+        .first()
+        if approval.approved_by_id
+        else None
+    )
+
+    approval.requested_by_name = requester.name if requester else "Employee"
+    approval.requested_by_role = requester.role if requester else "employee"
+    approval.approved_by_name = approver.name if approver else None
+        # Normalize values for React
+    approval.status = (approval.status or "").strip().lower()
+    approval.current_level = (approval.current_level or "").strip().lower()
+
+    return approvals
+
+# =====================================================
+# GET SINGLE APPROVAL REQUEST
+# =====================================================
+
+def get_approval_by_id(
+    db: Session,
+    approval_id: int,
+):
+    approval = (
+        db.query(Approval)
+        .filter(Approval.id == approval_id)
+        .first()
+    )
+
+    if not approval:
+        raise HTTPException(
+            status_code=404,
+            detail="Approval request not found.",
+        )
+
+    requester = (
+        db.query(User)
+        .filter(User.id == approval.requested_by_id)
+        .first()
+    )
+
+    approver = (
+        db.query(User)
+        .filter(User.id == approval.approved_by_id)
+        .first()
+        if approval.approved_by_id
+        else None
+    )
+
+    approval.requested_by_name = (
+        requester.name if requester else "Employee"
+    )
+
+    approval.approved_by_name = (
+        approver.name if approver else None
+    )
+
+    return approval
 
 
-def get_approval_history(db: Session, approval_id: int):
-    approval = get_approval_by_id(db, approval_id)
+# =====================================================
+# GET APPROVAL HISTORY
+# =====================================================
 
+def get_approval_history(
+    db: Session,
+    approval_id: int,
+):
     history = (
         db.query(ApprovalHistory)
-        .filter(ApprovalHistory.approval_id == approval.id)
-        .order_by(ApprovalHistory.created_at.asc())
+        .filter(
+            ApprovalHistory.approval_id == approval_id
+        )
+        .order_by(ApprovalHistory.created_at.desc())
         .all()
     )
 
     for item in history:
-        user = db.query(User).filter(User.id == item.action_by_id).first()
 
-        item.action_by_name = user.name if user else "Unknown User"
-        item.action_by_role = user.role if user else "Unknown"
+        user = (
+            db.query(User)
+            .filter(User.id == item.action_by_id)
+            .first()
+        )
+
+        item.action_by_name = (
+            user.name if user else "Unknown User"
+        )
+
+        item.action_by_role = (
+            user.role if user else "Unknown"
+        )
 
     return history
+
+
+# =====================================================
+# APPROVAL DASHBOARD STATISTICS
+# =====================================================
+
+def get_approval_statistics(
+    db: Session,
+    current_user: User,
+):
+    """
+    Dashboard Approval Statistics
+    """
+
+    role = (current_user.role or "").strip().lower()
+
+    query = db.query(Approval)
+
+    if role == "employee":
+        query = query.filter(
+            Approval.requested_by_id == current_user.id
+        )
+
+    approvals = query.all()
+
+    stats = {
+        "total_requests": len(approvals),
+        "pending": 0,
+        "manager_approved": 0,
+        "approved": 0,
+        "rejected": 0,
+        "hold": 0,
+    }
+
+    for approval in approvals:
+
+        status = (approval.status or "").lower()
+
+        if status in stats:
+            stats[status] += 1
+
+    return stats
+
+
+# =====================================================
+# GET PENDING APPROVALS
+# =====================================================
+
+def get_pending_approvals(
+    db: Session,
+    current_user: User,
+):
+    """
+    Manager -> Pending manager approvals.
+    Admin   -> Pending admin approvals.
+    """
+
+    role = (current_user.role or "").strip().lower()
+
+    if role == "manager":
+        pending = (
+            db.query(Approval)
+            .filter(
+                Approval.current_level == "manager"
+            )
+            .order_by(Approval.created_at.desc())
+            .all()
+        )
+
+    elif role == "admin":
+        pending = (
+            db.query(Approval)
+            .filter(
+                Approval.current_level == "admin"
+            )
+            .order_by(Approval.created_at.desc())
+            .all()
+        )
+
+    else:
+        raise HTTPException(
+            status_code=403,
+            detail="Employees cannot access pending approvals.",
+        )
+
+    return pending
+
+
+# =====================================================
+# GET RECENT APPROVALS
+# =====================================================
+
+def get_recent_approvals(
+    db: Session,
+    current_user: User,
+    limit: int = 5,
+):
+    role = current_user.role.lower()
+
+    query = db.query(Approval)
+
+    if role == "employee":
+        query = query.filter(Approval.requested_by_id == current_user.id)
+
+    approvals = (
+        query.order_by(Approval.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    for approval in approvals:
+        requester = (
+            db.query(User)
+            .filter(User.id == approval.requested_by_id)
+            .first()
+        )
+
+        approval.requested_by_name = requester.name if requester else "Employee"
+        approval.requested_by_role = requester.role if requester else "employee"
+
+    return approvals

@@ -1,10 +1,11 @@
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+
 from app.models.user import User
 
 from app.schemas.leave_schema import (
@@ -25,10 +26,12 @@ from app.services.leave_service import (
 router = APIRouter(
     prefix="/api/leaves",
     tags=["Leave Requests"],
-    redirect_slashes=False,
 )
 
 
+# ==========================================================
+# CREATE LEAVE REQUEST
+# ==========================================================
 
 @router.post(
     "",
@@ -47,6 +50,9 @@ def create_leave(
     )
 
 
+# ==========================================================
+# GET ALL LEAVE REQUESTS
+# ==========================================================
 
 @router.get(
     "",
@@ -62,6 +68,9 @@ def get_leaves(
     )
 
 
+# ==========================================================
+# GET SINGLE LEAVE REQUEST
+# ==========================================================
 
 @router.get(
     "/{leave_request_id}",
@@ -78,6 +87,9 @@ def get_leave(
     )
 
 
+# ==========================================================
+# ACCEPT / HOLD / REJECT / RESUME
+# ==========================================================
 
 @router.patch(
     "/{leave_request_id}/action",
@@ -89,14 +101,27 @@ def leave_action(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return take_leave_action(
-        db=db,
-        leave_request_id=leave_request_id,
-        leave_action=leave_action,
-        current_user=current_user,
-    )
+    try:
+        return take_leave_action(
+            db=db,
+            leave_request_id=leave_request_id,
+            leave_action=leave_action,
+            current_user=current_user,
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Leave action failed: {str(e)}",
+        )
 
 
+# ==========================================================
+# LEAVE HISTORY
+# ==========================================================
 
 @router.get(
     "/{leave_request_id}/history",

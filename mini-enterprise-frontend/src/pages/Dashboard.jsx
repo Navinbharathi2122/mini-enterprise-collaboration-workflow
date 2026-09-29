@@ -1,415 +1,369 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 
-import { getDashboardSummary } from "../services/dashboardService";
-import { getUserFromToken } from "../utils/jwt";
+import {
+  getDashboardSummary,
+  getAISummary,
+  getTasks,
+  getNotifications,
+  getAuditLogs,
+  markNotificationRead,
+} from "../services/dashboardService";
 
-function Dashboard() {
-  const navigate = useNavigate();
-  const currentUser = getUserFromToken();
+import StatCard from "../components/dashboard/StatCard";
+import TaskStatusChart from "../components/dashboard/TaskStatusChart";
+import AISummaryCard from "../components/dashboard/AISummaryCard";
+import NotificationPanel from "../components/dashboard/NotificationPanel";
+import AuditLogTable from "../components/dashboard/AuditLogTable";
 
-  const username =
-    currentUser?.name ||
-    currentUser?.email?.split("@")[0] ||
-    "User";
+import {
+  ClipboardList,
+  Users,
+  Bell,
+  ShieldCheck,
+  FileClock,
+  Activity,
+} from "lucide-react";
 
-  const [stats, setStats] = useState({
-    total_users: 0,
+import "../styles/dashboard.css";
+
+const Dashboard = () => {
+  const [loading, setLoading] = useState(true);
+
+  // Current Logged-in Role
+  const role = (localStorage.getItem("role") || "").toLowerCase();
+  const canViewAuditLogs = role === "admin" || role === "manager";
+
+  const [dashboardData, setDashboardData] = useState({
     total_tasks: 0,
     completed_tasks: 0,
     pending_tasks: 0,
-
     todo_tasks: 0,
     in_progress_tasks: 0,
     review_tasks: 0,
     done_tasks: 0,
-
+    total_users: 0,
     pending_approvals: 0,
+    leave_requests: 0,
     approved_requests: 0,
     rejected_requests: 0,
   });
 
-  const [loading, setLoading] = useState(true);
+  const [aiSummary, setAiSummary] = useState({
+    productivity_score: 0,
+    pending_tasks: 0,
+    completed_tasks: 0,
+    pending_approvals: 0,
+    leave_requests: 0,
+    unread_notifications: 0,
+    ai_status: "",
+    ai_message: "",
+  });
+
+  const [notifications, setNotifications] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
-    fetchDashboardStats();
+    loadDashboard();
   }, []);
 
-  const fetchDashboardStats = async () => {
+  // =====================================
+  // Dashboard Loader
+  // =====================================
+  const loadDashboard = async () => {
+    setLoading(true);
+
     try {
-      setLoading(true);
+      // Load APIs that every role can access
+      const [dashboardRes, aiRes, notificationRes, taskRes] =
+        await Promise.all([
+          getDashboardSummary(),
+          getAISummary(),
+          getNotifications(),
+          getTasks(),
+        ]);
 
-      const data = await getDashboardSummary();
+      setDashboardData(dashboardRes);
+      setAiSummary(aiRes);
+      setNotifications(notificationRes);
+      setTasks(taskRes);
 
-      setStats({
-        total_users: data.total_users || 0,
-        total_tasks: data.total_tasks || 0,
-        completed_tasks: data.completed_tasks || 0,
-        pending_tasks: data.pending_tasks || 0,
-
-        todo_tasks: data.todo_tasks || 0,
-        in_progress_tasks: data.in_progress_tasks || 0,
-        review_tasks: data.review_tasks || 0,
-        done_tasks: data.completed_tasks || 0,
-
-        pending_approvals: data.pending_approvals || 0,
-        approved_requests: data.approved_requests || 0,
-        rejected_requests: data.rejected_requests || 0,
-      });
-    } catch (error) {
-      console.error("Dashboard API Error:", error);
-
-      if (error.response?.status === 401) {
-        localStorage.removeItem("access_token");
-        navigate("/");
+      // Only Admin / Manager fetch audit logs
+      if (canViewAuditLogs) {
+        try {
+          const auditRes = await getAuditLogs();
+          setAuditLogs(auditRes);
+        } catch (err) {
+          console.log("Audit Logs unavailable.");
+          setAuditLogs([]);
+        }
+      } else {
+        setAuditLogs([]);
       }
+    } catch (error) {
+      console.error("Dashboard Load Error:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const completionRate =
-    stats.total_tasks > 0
-      ? Math.round((stats.completed_tasks / stats.total_tasks) * 100)
-      : 0;
+  // =====================================
+  // Notification Read
+  // =====================================
+  const handleReadNotification = async (id) => {
+    try {
+      await markNotificationRead(id);
 
-  const dashboardCards = [
-    {
-      title: "Total Users",
-      value: stats.total_users,
-      icon: "👥",
-      bg: "bg-blue-100",
-      text: "text-blue-700",
-    },
-    {
-      title: "Total Tasks",
-      value: stats.total_tasks,
-      icon: "📋",
-      bg: "bg-indigo-100",
-      text: "text-indigo-700",
-    },
-    {
-      title: "Completed Tasks",
-      value: stats.completed_tasks,
-      icon: "✅",
-      bg: "bg-emerald-100",
-      text: "text-emerald-700",
-    },
-    {
-      title: "Pending Tasks",
-      value: stats.pending_tasks,
-      icon: "⏳",
-      bg: "bg-orange-100",
-      text: "text-orange-700",
-    },
-    {
-      title: "TODO Tasks",
-      value: stats.todo_tasks,
-      icon: "🟡",
-      bg: "bg-yellow-100",
-      text: "text-yellow-700",
-    },
-    {
-      title: "In Progress",
-      value: stats.in_progress_tasks,
-      icon: "🔵",
-      bg: "bg-sky-100",
-      text: "text-sky-700",
-    },
-    {
-      title: "Review Tasks",
-      value: stats.review_tasks,
-      icon: "🟣",
-      bg: "bg-purple-100",
-      text: "text-purple-700",
-    },
-    {
-      title: "Done Tasks",
-      value: stats.done_tasks,
-      icon: "🟢",
-      bg: "bg-green-100",
-      text: "text-green-700",
-    },
-  ];
+      const updatedNotifications = await getNotifications();
+      setNotifications(updatedNotifications);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const unreadNotifications = notifications.filter(
+    (item) => item.is_read === false
+  ).length;
+
+  if (loading) {
+    return (
+      <div className="dashboard-loading">
+        <Activity className="spin" size={40} />
+        <h2>Loading Enterprise Dashboard...</h2>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="dashboard-wrapper">
       <Sidebar />
 
-      <div className="flex flex-1 flex-col">
-        <Navbar />
+      <div className="dashboard-content">
+        <Navbar title="Enterprise Workflow Dashboard" />
 
-        <main className="flex-1 overflow-y-auto p-8">
-          <section className="mb-8 rounded-3xl bg-gradient-to-r from-slate-900 via-slate-800 to-blue-800 p-8 text-white shadow-lg">
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-200">
-              Enterprise Workflow Management
+        {/* Welcome Banner */}
+        <div className="welcome-banner">
+          <div>
+            <h2>Welcome Back 👋</h2>
+            <p>
+              Monitor your workflow, tasks, approvals, leave requests,
+              notifications and AI productivity from one dashboard.
             </p>
+          </div>
 
-            <h1 className="mt-2 text-4xl font-bold">
-              Welcome back, {username}
-            </h1>
+          <div className="banner-score">
+            <h1>{aiSummary.productivity_score}%</h1>
+            <span>{aiSummary.ai_status}</span>
+          </div>
+        </div>
 
-            <p className="mt-3 max-w-2xl text-slate-300">
-              Manage users, assign tasks, monitor Kanban workflow, approvals,
-              and productivity from one dashboard.
-            </p>
-          </section>
+        {/* KPI Cards */}
+        <div className="stats-grid">
+          <StatCard
+            title="Total Tasks"
+            value={dashboardData.total_tasks}
+            icon={<ClipboardList size={26} />}
+            color="blue"
+          />
 
-          {loading ? (
-            <div className="flex h-72 items-center justify-center rounded-3xl bg-white shadow-sm">
-              <div className="text-center">
-                <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-700 border-t-transparent"></div>
-                <p className="mt-4 text-sm font-medium text-slate-500">
-                  Loading dashboard...
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Dashboard Cards */}
-              <section className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-                {dashboardCards.map((card) => (
-                  <div
-                    key={card.title}
-                    className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition"
-                  >
-                    <div
-                      className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl ${card.bg} text-2xl`}
-                    >
-                      {card.icon}
-                    </div>
+          <StatCard
+            title="Completed Tasks"
+            value={dashboardData.completed_tasks}
+            icon={<ShieldCheck size={26} />}
+            color="green"
+          />
 
-                    <p className="text-sm text-slate-500">{card.title}</p>
+          <StatCard
+            title="Pending Tasks"
+            value={dashboardData.pending_tasks}
+            icon={<FileClock size={26} />}
+            color="orange"
+          />
 
-                    <h2 className={`mt-2 text-3xl font-bold ${card.text}`}>
-                      {card.value}
-                    </h2>
-                  </div>
-                ))}
-              </section>
+          <StatCard
+            title="Users"
+            value={dashboardData.total_users}
+            icon={<Users size={26} />}
+            color="purple"
+          />
 
-              {/* Enterprise Overview */}
-              <section className="mt-8 grid gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="mb-6 flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-slate-900">
-                      Kanban Workflow Overview
-                    </h2>
+          <StatCard
+            title="Notifications"
+            value={notifications.length}
+            badge={unreadNotifications}
+            icon={<Bell size={26} />}
+            color="red"
+          />
 
-                    <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                      Live Workflow
-                    </span>
-                  </div>
-
-                  <div className="space-y-5">
-                    {[
-                      {
-                        label: "🟡 TODO",
-                        value: stats.todo_tasks,
-                        color: "bg-yellow-500",
-                      },
-                      {
-                        label: "🔵 IN PROGRESS",
-                        value: stats.in_progress_tasks,
-                        color: "bg-sky-500",
-                      },
-                      {
-                        label: "🟣 REVIEW",
-                        value: stats.review_tasks,
-                        color: "bg-purple-500",
-                      },
-                      {
-                        label: "🟢 DONE",
-                        value: stats.done_tasks,
-                        color: "bg-green-500",
-                      },
-                    ].map((item) => (
-                      <div key={item.label}>
-                        <div className="mb-2 flex justify-between text-sm font-semibold text-slate-700">
-                          <span>{item.label}</span>
-                          <span>{item.value}</span>
-                        </div>
-
-                        <div className="h-3 rounded-full bg-slate-200 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${item.color}`}
-                            style={{
-                              width: `${
-                                stats.total_tasks === 0
-                                  ? 0
-                                  : (item.value / stats.total_tasks) * 100
-                              }%`,
-                            }}
-                          ></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Quick Insights */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <h2 className="mb-6 text-xl font-bold text-slate-900">
-                    Quick Insights
-                  </h2>
-
-                  <div className="space-y-5">
-                    <div className="rounded-xl bg-blue-50 p-4">
-                      <p className="text-sm font-medium text-blue-700">
-                        Completion Rate
-                      </p>
-
-                      <h3 className="mt-2 text-3xl font-bold text-blue-900">
-                        {completionRate}%
-                      </h3>
-                    </div>
-
-                    <div className="rounded-xl bg-emerald-50 p-4">
-                      <p className="text-sm font-medium text-emerald-700">
-                        Completed Tasks
-                      </p>
-
-                      <h3 className="mt-2 text-2xl font-bold text-emerald-700">
-                        {stats.completed_tasks}
-                      </h3>
-                    </div>
-
-                    <div className="rounded-xl bg-orange-50 p-4">
-                      <p className="text-sm font-medium text-orange-700">
-                        Pending Tasks
-                      </p>
-
-                      <h3 className="mt-2 text-2xl font-bold text-orange-700">
-                        {stats.pending_tasks}
-                      </h3>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-100 p-4">
-                      <p className="text-sm font-medium text-slate-700">
-                        Active Users
-                      </p>
-
-                      <h3 className="mt-2 text-2xl font-bold text-slate-900">
-                        {stats.total_users}
-                      </h3>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Approval Analytics */}
-              <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="mb-6 flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-900">
-                    Approval Analytics
-                  </h2>
-
-                  <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
-                    Phase 2 Workflow
-                  </span>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-3">
-                  <div className="rounded-2xl bg-orange-50 p-5">
-                    <div className="text-3xl">⏳</div>
-                    <p className="mt-3 text-sm text-orange-700">
-                      Pending Approvals
-                    </p>
-                    <h3 className="mt-2 text-3xl font-bold text-orange-800">
-                      {stats.pending_approvals}
-                    </h3>
-                  </div>
-
-                  <div className="rounded-2xl bg-green-50 p-5">
-                    <div className="text-3xl">✅</div>
-                    <p className="mt-3 text-sm text-green-700">
-                      Approved Requests
-                    </p>
-                    <h3 className="mt-2 text-3xl font-bold text-green-800">
-                      {stats.approved_requests}
-                    </h3>
-                  </div>
-
-                  <div className="rounded-2xl bg-red-50 p-5">
-                    <div className="text-3xl">❌</div>
-                    <p className="mt-3 text-sm text-red-700">
-                      Rejected Requests
-                    </p>
-                    <h3 className="mt-2 text-3xl font-bold text-red-800">
-                      {stats.rejected_requests}
-                    </h3>
-                  </div>
-                </div>
-              </section>
-
-              {/* Overall Progress */}
-              <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="mb-5 flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-900">
-                    Overall Task Progress
-                  </h2>
-
-                  <span className="text-sm font-medium text-slate-500">
-                    {completionRate}% Completed
-                  </span>
-                </div>
-
-                <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-700 to-emerald-500 transition-all duration-700"
-                    style={{ width: `${completionRate}%` }}
-                  ></div>
-                </div>
-
-                <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-                  <div className="rounded-xl bg-yellow-50 p-4 text-center">
-                    <p className="text-sm text-yellow-700">TODO</p>
-                    <h4 className="text-2xl font-bold text-yellow-800">
-                      {stats.todo_tasks}
-                    </h4>
-                  </div>
-
-                  <div className="rounded-xl bg-sky-50 p-4 text-center">
-                    <p className="text-sm text-sky-700">IN PROGRESS</p>
-                    <h4 className="text-2xl font-bold text-sky-800">
-                      {stats.in_progress_tasks}
-                    </h4>
-                  </div>
-
-                  <div className="rounded-xl bg-purple-50 p-4 text-center">
-                    <p className="text-sm text-purple-700">REVIEW</p>
-                    <h4 className="text-2xl font-bold text-purple-800">
-                      {stats.review_tasks}
-                    </h4>
-                  </div>
-
-                  <div className="rounded-xl bg-green-50 p-4 text-center">
-                    <p className="text-sm text-green-700">DONE</p>
-                    <h4 className="text-2xl font-bold text-green-800">
-                      {stats.done_tasks}
-                    </h4>
-                  </div>
-                </div>
-              </section>
-
-              {/* Refresh Button */}
-              <section className="mt-8 flex justify-end">
-                <button
-                  onClick={fetchDashboardStats}
-                  className="rounded-xl bg-blue-700 px-6 py-3 font-semibold text-white transition hover:bg-blue-800"
-                >
-                  Refresh Dashboard
-                </button>
-              </section>
-            </>
+          {canViewAuditLogs && (
+            <StatCard
+              title="Audit Logs"
+              value={auditLogs.length}
+              icon={<Activity size={26} />}
+              color="dark"
+            />
           )}
-        </main>
+        </div>
+
+        {/* AI Summary */}
+        <div className="dashboard-section">
+          <AISummaryCard aiSummary={aiSummary} />
+        </div>
+
+        {/* Task Analytics */}
+        <div className="section-divider">
+          <h3>Task Analytics</h3>
+        </div>
+
+        <div className="dashboard-grid-two">
+          {/* Task Status */}
+          <div className="dashboard-card">
+            <div className="card-header">
+              <h3>Task Status Overview</h3>
+              <span>Live Workflow Analytics</span>
+            </div>
+
+            <TaskStatusChart dashboardData={dashboardData} />
+          </div>
+
+          {/* Notifications */}
+          <div className="dashboard-card">
+            <div className="card-header">
+              <h3>Notifications</h3>
+              <span>{unreadNotifications} Unread</span>
+            </div>
+
+            <NotificationPanel
+              notifications={notifications}
+              onRead={handleReadNotification}
+            />
+          </div>
+        </div>
+
+        {/* Recent Tasks */}
+        <div className="dashboard-card recent-tasks-card">
+          <div className="card-header">
+            <h3>Recent Tasks</h3>
+            <span>Latest Tasks from FastAPI</span>
+          </div>
+
+          <table className="dashboard-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Task</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Assigned To</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {tasks.length > 0 ? (
+                tasks.slice(0, 8).map((task) => (
+                  <tr key={task.id}>
+                    <td>#{task.id}</td>
+
+                    <td>{task.title}</td>
+
+                    <td>
+                      <span
+                        className={`status-badge ${String(task.status)
+                          .replace(/\s+/g, "-")
+                          .toLowerCase()}`}
+                      >
+                        {task.status}
+                      </span>
+                    </td>
+
+                    <td>
+                      <span
+                        className={`priority-badge ${String(task.priority)
+                          .toLowerCase()}`}
+                      >
+                        {task.priority}
+                      </span>
+                    </td>
+
+                    <td>{task.assigned_to_name || "Not Assigned"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" className="empty-table">
+                    No Tasks Available
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Audit Logs (Admin & Manager Only) */}
+        {canViewAuditLogs && (
+          <>
+            <div className="section-divider">
+              <h3>System Activity</h3>
+            </div>
+
+            <div className="dashboard-card audit-card">
+              <div className="card-header">
+                <div>
+                  <h3>Audit Log Activity</h3>
+                  <span>Latest Enterprise Workflow Activities</span>
+                </div>
+
+                <button className="refresh-btn" onClick={loadDashboard}>
+                  Refresh
+                </button>
+              </div>
+
+              <AuditLogTable auditLogs={auditLogs} />
+            </div>
+          </>
+        )}
+
+        {/* Footer */}
+        <footer className="dashboard-footer">
+          <div className="footer-left">
+            <h4>Stackly Enterprise Workflow Management</h4>
+
+            <p>
+              Enterprise Dashboard with AI Summary, Notifications,
+              Leave Requests, Approvals and Workflow Analytics.
+            </p>
+          </div>
+
+          <div className="footer-right">
+            <div className="footer-stat">
+              <span className="footer-label">Tasks</span>
+              <h3>{dashboardData.total_tasks}</h3>
+            </div>
+
+            <div className="footer-stat">
+              <span className="footer-label">Users</span>
+              <h3>{dashboardData.total_users}</h3>
+            </div>
+
+            <div className="footer-stat">
+              <span className="footer-label">Unread Notifications</span>
+              <h3>{unreadNotifications}</h3>
+            </div>
+
+            {canViewAuditLogs && (
+              <div className="footer-stat">
+                <span className="footer-label">Audit Logs</span>
+                <h3>{auditLogs.length}</h3>
+              </div>
+            )}
+          </div>
+        </footer>
       </div>
     </div>
   );
-}
+};
 
 export default Dashboard;
