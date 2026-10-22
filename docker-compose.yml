@@ -1,0 +1,98 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - mecw_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DATABASE_NAME:-enterprise_workflow_db}
+      MYSQL_USER: ${DATABASE_USER:-mecw_user}
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD:-change_this_database_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_this_root_password}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mecw_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports: ["8000:8000"]
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  auth-service:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: uvicorn services.auth_service.main:app --host 0.0.0.0 --port 8001
+    ports: ["8001:8001"]
+    depends_on:
+      mysql: { condition: service_healthy }
+
+  user-service:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8001
+    command: uvicorn services.user_service.main:app --host 0.0.0.0 --port 8002
+    ports: ["8002:8002"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+
+  tenant-admin-service:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      USER_SERVICE_URL: http://user-service:8002
+    command: uvicorn services.tenant_admin_service.main:app --host 0.0.0.0 --port 8003
+    ports: ["8003:8003"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+
+  frontend:
+    build: ./mini-enterprise-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: http://127.0.0.1:8000
+      VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
+      VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
+      VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
+      VITE_AUTH0_DB_CONNECTION: ${VITE_AUTH0_DB_CONNECTION:-Username-Password-Authentication}
+      VITE_USER_SERVICE_URL: http://localhost:8002
+      VITE_AUTH0_GOOGLE_CONNECTION: ${VITE_AUTH0_GOOGLE_CONNECTION:-google-oauth2}
+      VITE_AUTH0_MICROSOFT_CONNECTION: ${VITE_AUTH0_MICROSOFT_CONNECTION:-windowslive}
+    ports: ["5173:5173"]
+    depends_on:
+      backend: { condition: service_started }
+      user-service: { condition: service_started }
+
+volumes:
+  mecw_mysql_data:
+  mecw_redis_data:

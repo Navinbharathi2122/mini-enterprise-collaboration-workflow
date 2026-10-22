@@ -1,0 +1,147 @@
+
+.ai-card {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 24px;
+  margin-top: 25px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08);
+}
+
+.loading-card {
+  text-align: center;
+  color: #64748b;
+}
+
+.ai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ai-header h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.ai-header p {
+  margin-top: 5px;
+  color: #64748b;
+}
+
+.ai-badge {
+  width: 55px;
+  height: 55px;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.score-section {
+  margin-top: 28px;
+}
+
+.score-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.score-info h4 {
+  color: #475569;
+  margin: 0;
+}
+
+.score-info h1 {
+  margin: 0;
+  font-size: 42px;
+}
+
+.score-bar {
+  width: 100%;
+  height: 14px;
+  background: #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 14px;
+}
+
+.score-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.5s ease;
+}
+
+.ai-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 18px;
+  margin-top: 30px;
+}
+
+.metric-card {
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 18px;
+  border-left: 5px solid #2563eb;
+}
+
+.metric-title {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.metric-card h3 {
+  margin-top: 10px;
+  margin-bottom: 0;
+  font-size: 28px;
+  color: #0f172a;
+}
+
+.recommendation-box {
+  margin-top: 30px;
+  padding: 18px;
+  border-radius: 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.recommendation-box h3 {
+  margin-top: 0;
+  color: #1d4ed8;
+}
+
+.recommendation-box ul {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.recommendation-box li {
+  margin-bottom: 10px;
+  color: #1e3a8a;
+}
+
+.recommendation-box p {
+  margin-top: 10px;
+  color: #64748b;
+}
+
+@media (max-width: 768px) {
+  .ai-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .score-info h1 {
+    font-size: 32px;
+  }
+
+  .ai-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

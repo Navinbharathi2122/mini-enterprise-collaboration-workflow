@@ -1,0 +1,81 @@
+{
+  "info": {
+    "name": "MECW Phase 5 — Security and Performance",
+    "description": "Run against a development database only. Set baseUrl, localEmail, localPassword, and refreshToken variables. Reset-password token must come from configured SMTP email; never paste real tokens into shared collections.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "localEmail", "value": "user@example.com" },
+    { "key": "localPassword", "value": "replace-with-local-account-password" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "resetToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Login — issue access and refresh tokens",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{localEmail}}\",\n  \"password\": \"{{localPassword}}\"\n}" },
+        "url": "{{baseUrl}}/auth/login"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Login succeeded', () => pm.response.to.have.status(200));", "const body = pm.response.json();", "if (body.access_token) pm.collectionVariables.set('accessToken', body.access_token);", "if (body.refresh_token) pm.collectionVariables.set('refreshToken', body.refresh_token);", "pm.test('Both tokens are present', () => { pm.expect(body.access_token).to.be.a('string'); pm.expect(body.refresh_token).to.be.a('string'); });"] } }]
+    },
+    {
+      "name": "Refresh — rotate refresh token",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}" },
+        "url": "{{baseUrl}}/auth/refresh"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Refresh succeeded', () => pm.response.to.have.status(200));", "const body = pm.response.json();", "if (body.access_token) pm.collectionVariables.set('accessToken', body.access_token);", "if (body.refresh_token) pm.collectionVariables.set('refreshToken', body.refresh_token);"] } }]
+    },
+    {
+      "name": "Logout — revoke refresh token",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}" },
+        "url": "{{baseUrl}}/auth/logout"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Logout succeeded', () => pm.response.to.have.status(200));"] } }]
+    },
+    {
+      "name": "Forgot password — generic response",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{localEmail}}\"\n}" },
+        "url": "{{baseUrl}}/auth/forgot-password"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Generic response is returned', () => pm.response.to.have.status(200));", "pm.test('Response does not disclose account existence', () => pm.expect(pm.response.json().message).to.include('If an active account exists'));"] } }]
+    },
+    {
+      "name": "Reset password — token from email",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"new_password\": \"replace-with-strong-new-password\"\n}" },
+        "url": "{{baseUrl}}/auth/reset-password"
+      }
+    },
+    {
+      "name": "Tasks — pagination/filter/sort",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/tasks/?page=1&limit=20&status=todo&priority=high&sort_by=created_at&sort_order=desc" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Task list request completed', () => pm.expect([200, 401, 403]).to.include(pm.response.code));", "if (pm.response.code === 200) pm.test('Response is bounded to requested page', () => pm.expect(pm.response.json().length).to.be.at.most(20));"] } }]
+    },
+    {
+      "name": "Users — pagination/filter/sort",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/users/?page=1&limit=20&sort_order=asc&role=employee" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('User list request completed', () => pm.expect([200, 401, 403]).to.include(pm.response.code));", "if (pm.response.code === 200) pm.test('Response is bounded to requested page', () => pm.expect(pm.response.json().length).to.be.at.most(20));"] } }]
+    },
+    {
+      "name": "Approvals — pagination/filter/sort",
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/approvals/?page=1&limit=20&status=pending&sort_order=desc" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Approval list request completed', () => pm.expect([200, 401, 403]).to.include(pm.response.code));", "if (pm.response.code === 200) pm.test('Response is bounded to requested page', () => pm.expect(pm.response.json().length).to.be.at.most(20));"] } }]
+    }
+  ]
+}

@@ -1,0 +1,1235 @@
+import { useEffect, useMemo, useState } from "react";
+import { useAuth0 } from "@auth0/auth0-react";
+import api from "../services/axios";
+import Sidebar from "../components/Sidebar";
+import Navbar from "../components/Navbar";
+
+import CreateLeaveModal from "../components/CreateLeaveModal";
+import LeaveActionModal from "../components/LeaveActionModal";
+import LeaveHistoryModal from "../components/LeaveHistoryModal";
+
+import { getAllLeaveRequests } from "../services/leaveService";
+
+function LeaveRequests() {
+  // ================= USER / AUTH0 ROLE =================
+
+  const { isAuthenticated, isLoading: authLoading } = useAuth0();
+  const [userRole, setUserRole] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchUserRole() {
+      if (authLoading) return;
+
+      if (!isAuthenticated) {
+        setUserRole("");
+        return;
+      }
+
+      try {
+        // The shared Axios instance gets the Auth0 access token.
+        const response = await api.get("/users/me");
+        const role = String(response.data?.role || "").toLowerCase().trim();
+
+        if (!role) {
+          throw new Error("The /users/me response does not contain a role.");
+        }
+
+        console.info("Leave page: role returned by /users/me:", role);
+
+        if (!cancelled) {
+          setUserRole(role);
+        }
+      } catch (error) {
+        console.error(
+          "Leave page: role fetch failed:",
+          error.response?.data || error.message
+        );
+
+        if (!cancelled) {
+          setUserRole("");
+        }
+      }
+    }
+
+    fetchUserRole();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, authLoading]);
+
+  // Role names may differ in the database (Manager / Team Leader / team_leader).
+  const normalizeRole = (value = "") => {
+    const role = String(value).toLowerCase().trim().replace(/[_-]+/g, " ");
+    if (["manager", "team leader", "teamlead", "team lead"].includes(role)) return "manager";
+    if (["admin", "super admin", "superadmin"].includes(role)) return "admin";
+    if (["employee", "staff"].includes(role)) return "employee";
+    return role;
+  };
+
+  const canonicalRole = normalizeRole(userRole);
+  const isAdmin = canonicalRole === "admin";
+  const isManager = canonicalRole === "manager";
+  const isEmployee = canonicalRole === "employee";
+
+  // ================= STATES =================
+
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const [selectedLeave, setSelectedLeave] = useState(null);
+  const [actionType, setActionType] = useState("");
+
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // ================= LOAD DATA =================
+
+  useEffect(() => {
+    fetchLeaveRequests();
+  }, []);
+
+  const fetchLeaveRequests = async () => {
+    try {
+      setLoading(true);
+
+      const data = await getAllLeaveRequests();
+
+      console.log("Leave Requests API:", data);
+
+      setLeaveRequests(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error fetching leave requests:", error);
+      setLeaveRequests([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ================= HELPERS =================
+
+  const normalizeStatus = (status = "") =>
+    status.toLowerCase().trim();
+
+  const normalizeLevel = (level = "") =>
+    level.toLowerCase().trim();
+
+  // ================= FILTER =================
+
+  const filteredLeaveRequests = useMemo(() => {
+    return leaveRequests.filter((leave) => {
+      const keyword = search.toLowerCase();
+
+      const searchMatch =
+        leave.leave_type?.toLowerCase().includes(keyword) ||
+        leave.reason?.toLowerCase().includes(keyword) ||
+        leave.requested_by_name?.toLowerCase().includes(keyword);
+
+      const statusMatch =
+        statusFilter === "all"
+          ? true
+          : normalizeStatus(leave.status) === statusFilter;
+
+      return searchMatch && statusMatch;
+    });
+  }, [leaveRequests, search, statusFilter]);
+
+  // ================= DASHBOARD =================
+
+  const dashboard = useMemo(() => {
+    return {
+      total: leaveRequests.length,
+
+      pending: leaveRequests.filter(
+        (leave) => normalizeStatus(leave.status) === "pending"
+      ).length,
+
+      hold: leaveRequests.filter(
+        (leave) => normalizeStatus(leave.status) === "hold"
+      ).length,
+
+      approved: leaveRequests.filter((leave) =>
+        ["approved", "manager_approved"].includes(
+          normalizeStatus(leave.status)
+        )
+      ).length,
+
+      rejected: leaveRequests.filter(
+        (leave) => normalizeStatus(leave.status) === "rejected"
+      ).length,
+    };
+  }, [leaveRequests]);
+
+  // ================= ANALYTICS =================
+
+  const analytics = useMemo(() => {
+    const total = leaveRequests.length || 1;
+
+    return {
+      approvalRate: Math.round((dashboard.approved / total) * 100),
+      rejectionRate: Math.round((dashboard.rejected / total) * 100),
+      holdRate: Math.round((dashboard.hold / total) * 100),
+      utilizationRate: Math.round(
+        ((dashboard.pending + dashboard.approved) / total) * 100
+      ),
+    };
+  }, [leaveRequests, dashboard]);
+
+  // ================= MONTHLY TREND =================
+
+  const monthlyTrend = useMemo(() => {
+    const months = [
+      "Jan","Feb","Mar","Apr","May","Jun",
+      "Jul","Aug","Sep","Oct","Nov","Dec",
+    ];
+
+    const monthlyCount = new Array(12).fill(0);
+
+    leaveRequests.forEach((leave) => {
+      if (!leave.created_at) return;
+
+      const month = new Date(leave.created_at).getMonth();
+      monthlyCount[month]++;
+    });
+
+    return months.map((month, index) => ({
+      month,
+      count: monthlyCount[index],
+    }));
+  }, [leaveRequests]);
+
+    // ================= PIE CHART DATA =================
+
+  const pieData = useMemo(() => {
+    const total = leaveRequests.length || 1;
+
+    return [
+      {
+        label: "Approved",
+        value: dashboard.approved,
+        color: "#16A34A",
+        percent: Math.round((dashboard.approved / total) * 100),
+      },
+      {
+        label: "Pending",
+        value: dashboard.pending,
+        color: "#F59E0B",
+        percent: Math.round((dashboard.pending / total) * 100),
+      },
+      {
+        label: "Hold",
+        value: dashboard.hold,
+        color: "#9333EA",
+        percent: Math.round((dashboard.hold / total) * 100),
+      },
+      {
+        label: "Rejected",
+        value: dashboard.rejected,
+        color: "#DC2626",
+        percent: Math.round((dashboard.rejected / total) * 100),
+      },
+    ];
+  }, [leaveRequests, dashboard]);
+
+  // ================= STATUS BADGES =================
+
+  const getStatusBadge = (status) => {
+    switch (normalizeStatus(status)) {
+      case "approved":
+        return "bg-green-100 text-green-700";
+
+      case "manager_approved":
+        return "bg-emerald-100 text-emerald-700";
+
+      case "pending":
+        return "bg-yellow-100 text-yellow-700";
+
+      case "hold":
+        return "bg-purple-100 text-purple-700";
+
+      case "rejected":
+        return "bg-red-100 text-red-700";
+
+      default:
+        return "bg-slate-100 text-slate-700";
+    }
+  };
+
+  const getStatusText = (status) => {
+    switch (normalizeStatus(status)) {
+      case "manager_approved":
+        return "Manager Approved";
+
+      case "approved":
+        return "Approved";
+
+      case "pending":
+        return "Pending";
+
+      case "hold":
+        return "On Hold";
+
+      case "rejected":
+        return "Rejected";
+
+      default:
+        return status;
+    }
+  };
+
+  // ================= CURRENT LEVEL BADGES =================
+
+  const getLevelBadge = (level) => {
+    switch (normalizeLevel(level)) {
+      case "manager":
+        return "bg-blue-100 text-blue-700";
+
+      case "admin":
+        return "bg-indigo-100 text-indigo-700";
+
+      case "completed":
+        return "bg-green-100 text-green-700";
+
+      default:
+        return "bg-slate-100 text-slate-700";
+    }
+  };
+
+  const getLevelText = (level) => {
+    switch (normalizeLevel(level)) {
+      case "manager":
+        return "Manager Review";
+
+      case "admin":
+        return "Admin Review";
+
+      case "completed":
+        return "Completed";
+
+      default:
+        return level;
+    }
+  };
+
+  const getProgressWidth = (value) => {
+    return `${Math.min(value, 100)}%`;
+  };
+
+  // ================= RETURN UI START =================
+
+  return (
+    <div className="flex min-h-screen bg-slate-50">
+
+      <Sidebar />
+
+      <div className="flex flex-1 flex-col">
+
+        <Navbar />
+
+        <main className="flex-1 overflow-y-auto p-8">
+
+          {/* ================= PAGE HEADER ================= */}
+
+          <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">
+                Enterprise Leave Request Management
+              </h1>
+
+              <p className="mt-2 text-slate-500">
+                Stackly HRMS • Employee → Manager → Admin Approval Workflow
+              </p>
+            </div>
+
+            {(isEmployee || isManager) && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-blue-800"
+              >
+                {isManager ? "+ Create Leave Request" : "+ Apply Leave"}
+              </button>
+            )}
+
+          </div>
+
+          {/* ================= KPI CARDS ================= */}
+
+          <div className="mb-8 grid gap-5 md:grid-cols-5">
+
+            <div className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-blue-600">
+                Total Requests
+              </p>
+
+              <h2 className="mt-2 text-3xl font-bold text-blue-700">
+                {dashboard.total}
+              </h2>
+
+              <div className="mt-4 h-2 rounded-full bg-blue-100">
+                <div
+                  className="h-2 rounded-full bg-blue-600"
+                  style={{ width: "100%" }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-yellow-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-yellow-600">
+                Pending Manager Review
+              </p>
+
+              <h2 className="mt-2 text-3xl font-bold text-yellow-700">
+                {dashboard.pending}
+              </h2>
+
+              <div className="mt-4 h-2 rounded-full bg-yellow-100">
+                <div
+                  className="h-2 rounded-full bg-yellow-500"
+                  style={{
+                    width: getProgressWidth(analytics.utilizationRate),
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-purple-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-purple-600">
+                Hold Requests
+              </p>
+
+              <h2 className="mt-2 text-3xl font-bold text-purple-700">
+                {dashboard.hold}
+              </h2>
+
+              <div className="mt-4 h-2 rounded-full bg-purple-100">
+                <div
+                  className="h-2 rounded-full bg-purple-600"
+                  style={{
+                    width: getProgressWidth(analytics.holdRate),
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-green-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-green-600">
+                Approved Requests
+              </p>
+
+              <h2 className="mt-2 text-3xl font-bold text-green-700">
+                {dashboard.approved}
+              </h2>
+
+              <div className="mt-4 h-2 rounded-full bg-green-100">
+                <div
+                  className="h-2 rounded-full bg-green-600"
+                  style={{
+                    width: getProgressWidth(analytics.approvalRate),
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-red-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-red-600">
+                Rejected Requests
+              </p>
+
+              <h2 className="mt-2 text-3xl font-bold text-red-700">
+                {dashboard.rejected}
+              </h2>
+
+              <div className="mt-4 h-2 rounded-full bg-red-100">
+                <div
+                  className="h-2 rounded-full bg-red-600"
+                  style={{
+                    width: getProgressWidth(analytics.rejectionRate),
+                  }}
+                />
+              </div>
+            </div>
+
+          </div>
+
+          {/* ================= ENTERPRISE ANALYTICS ================= */}
+
+          <div className="mb-8 grid gap-5 md:grid-cols-4">
+
+            <div className="rounded-2xl bg-gradient-to-r from-green-500 to-green-600 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-90">
+                Approval Rate
+              </p>
+
+              <h2 className="mt-2 text-3xl font-bold">
+                {analytics.approvalRate}%
+              </h2>
+
+              <p className="mt-2 text-xs opacity-80">
+                Approved leave requests.
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-r from-red-500 to-red-600 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-90">
+                Rejection Rate
+              </p>
+
+              <h2 className="mt-2 text-3xl font-bold">
+                {analytics.rejectionRate}%
+              </h2>
+
+              <p className="mt-2 text-xs opacity-80">
+                Rejected leave requests.
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-90">
+                Hold Rate
+              </p>
+
+              <h2 className="mt-2 text-3xl font-bold">
+                {analytics.holdRate}%
+              </h2>
+
+              <p className="mt-2 text-xs opacity-80">
+                Requests currently on hold.
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-700 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-90">
+                Leave Utilization
+              </p>
+
+              <h2 className="mt-2 text-3xl font-bold">
+                {analytics.utilizationRate}%
+              </h2>
+
+              <p className="mt-2 text-xs opacity-80">
+                Pending + Approved requests.
+              </p>
+            </div>
+
+          </div>
+
+          {/* ================= SEARCH & FILTER ================= */}
+
+          <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+
+            <div className="flex flex-col gap-4 md:flex-row">
+
+              <input
+                type="text"
+                placeholder="Search employee, leave type or reason..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+              />
+
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-3"
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="manager_approved">Manager Approved</option>
+                <option value="approved">Approved</option>
+                <option value="hold">Hold</option>
+                <option value="rejected">Rejected</option>
+              </select>
+
+            </div>
+
+          </div>
+
+                    {/* ================= LEAVE REQUEST TABLE ================= */}
+
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+            <div className="border-b border-slate-200 bg-slate-100 px-6 py-4">
+              <h3 className="text-lg font-semibold text-slate-800">
+                Leave Requests
+              </h3>
+
+              <p className="text-sm text-slate-500">
+                Total {filteredLeaveRequests.length} Leave Request(s)
+              </p>
+            </div>
+
+            <div className="overflow-x-auto">
+
+              <table className="min-w-full">
+
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    <th className="px-6 py-4">Employee</th>
+                    <th className="px-6 py-4">Leave Details</th>
+                    <th className="px-6 py-4">Duration</th>
+                    <th className="px-6 py-4">Current Level</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Applied On</th>
+                    <th className="px-6 py-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-200">
+
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-16 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-700"></div>
+
+                          <p className="text-slate-500">
+                            Loading leave requests...
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredLeaveRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-16 text-center">
+                        <div className="flex flex-col items-center gap-4">
+
+                          <div className="text-6xl">🌴</div>
+
+                          <h3 className="text-lg font-semibold text-slate-700">
+                            No Leave Requests Found
+                          </h3>
+
+                          <p className="text-sm text-slate-500">
+                            Try changing search or status filters.
+                          </p>
+
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredLeaveRequests.map((leave) => (
+                      <tr
+                        key={leave.id}
+                        className="transition hover:bg-slate-50"
+                      >
+
+                        {/* ================= EMPLOYEE ================= */}
+
+                        <td className="px-6 py-5">
+                          <div className="flex items-center gap-3">
+
+                            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-700 text-sm font-bold text-white">
+                              {leave.requested_by_name?.charAt(0) || "U"}
+                            </div>
+
+                            <div>
+                              <p className="font-semibold text-slate-900">
+                                {leave.requested_by_name}
+                              </p>
+
+                              <p className="text-xs capitalize text-slate-500">
+                                {leave.requested_by_role}
+                              </p>
+                            </div>
+
+                          </div>
+                        </td>
+
+                        {/* ================= LEAVE DETAILS ================= */}
+
+                        <td className="px-6 py-5">
+
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                            {leave.leave_type}
+                          </span>
+
+                          <p className="mt-2 max-w-xs text-sm text-slate-600">
+                            {leave.reason}
+                          </p>
+
+                        </td>
+
+                        {/* ================= DURATION ================= */}
+
+                        <td className="px-6 py-5">
+
+                          <p className="font-medium text-slate-800">
+                            {leave.start_date}
+                          </p>
+
+                          <p className="text-sm text-slate-500">
+                            to {leave.end_date}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-400">
+                            {leave.days} Day(s)
+                          </p>
+
+                        </td>
+
+                        {/* ================= CURRENT LEVEL ================= */}
+
+                        <td className="px-6 py-5">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${getLevelBadge(
+                              leave.current_level
+                            )}`}
+                          >
+                            {getLevelText(leave.current_level)}
+                          </span>
+                        </td>
+
+                        {/* ================= STATUS ================= */}
+
+                        <td className="px-6 py-5">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
+                              leave.status
+                            )}`}
+                          >
+                            {getStatusText(leave.status)}
+                          </span>
+                        </td>
+
+                        {/* ================= APPLIED DATE ================= */}
+
+                        <td className="px-6 py-5">
+
+                          <p className="text-sm text-slate-700">
+                            {new Date(leave.created_at).toLocaleDateString(
+                              "en-GB"
+                            )}
+                          </p>
+
+                          <p className="text-xs text-slate-500">
+                            {new Date(leave.created_at).toLocaleTimeString(
+                              "en-IN",
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            )}
+                          </p>
+
+                        </td>
+
+                        {/* ========================================================= */}
+                        {/* =============== ENTERPRISE ACTION BUTTONS ================ */}
+                        {/* ========================================================= */}
+
+                        <td className="px-6 py-5">
+
+                          <div className="flex flex-wrap justify-center gap-2">
+
+                            {/* ========== MANAGER BUTTONS ========== */}
+
+                            {isManager &&
+                              normalizeLevel(leave.current_level) === "manager" &&
+                              normalizeStatus(leave.status) === "pending" && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedLeave(leave);
+                                      setActionType("approve");
+                                      setShowActionModal(true);
+                                    }}
+                                    className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
+                                  >
+                                    ✅ Approve
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      setSelectedLeave(leave);
+                                      setActionType("hold");
+                                      setShowActionModal(true);
+                                    }}
+                                    className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700"
+                                  >
+                                    ⏸ Hold
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      setSelectedLeave(leave);
+                                      setActionType("reject");
+                                      setShowActionModal(true);
+                                    }}
+                                    className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
+                                  >
+                                    ❌ Reject
+                                  </button>
+                                </>
+                              )}
+
+                            {/* ========== ADMIN FINAL BUTTONS ========== */}
+
+                            {isAdmin &&
+                              normalizeLevel(leave.current_level) === "admin" &&
+                              ["pending", "manager_approved"].includes(
+                                normalizeStatus(leave.status)
+                              ) && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedLeave(leave);
+                                      setActionType("approve");
+                                      setShowActionModal(true);
+                                    }}
+                                    className="rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold text-white hover:bg-green-800"
+                                  >
+                                    ✅ Final Approve
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      setSelectedLeave(leave);
+                                      setActionType("hold");
+                                      setShowActionModal(true);
+                                    }}
+                                    className="rounded-lg bg-purple-700 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-800"
+                                  >
+                                    ⏸ Hold
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      setSelectedLeave(leave);
+                                      setActionType("reject");
+                                      setShowActionModal(true);
+                                    }}
+                                    className="rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white hover:bg-red-800"
+                                  >
+                                    ❌ Reject
+                                  </button>
+                                </>
+                              )}
+
+                            {/* ========== HOLD RESUME ========== */}
+
+                            {(isManager || isAdmin) &&
+                              normalizeStatus(leave.status) === "hold" && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedLeave(leave);
+                                    setActionType("resume");
+                                    setShowActionModal(true);
+                                  }}
+                                  className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                                >
+                                  ▶ Resume
+                                </button>
+                              )}
+
+                            {/* ========== COMPLETED BADGE ========== */}
+
+                            {["approved", "rejected"].includes(
+                              normalizeStatus(leave.status)
+                            ) && (
+                              <span className="rounded-lg bg-green-100 px-3 py-2 text-xs font-semibold text-green-700">
+                                Completed
+                              </span>
+                            )}
+
+                            {/* ========== EMPLOYEE VIEW ========== */}
+
+                            {isEmployee &&
+                              !["approved", "rejected"].includes(
+                                normalizeStatus(leave.status)
+                              ) && (
+                                <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">
+                                  Waiting for Approval
+                                </span>
+                              )}
+
+                            {/* ========== HISTORY BUTTON ========== */}
+
+                            <button
+                              onClick={() => {
+                                setSelectedLeave(leave);
+                                setShowHistoryModal(true);
+                              }}
+                              className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                            >
+                              📜 History
+                            </button>
+
+                          </div>
+
+                        </td>
+
+                      </tr>
+                    ))
+                  )}
+
+                </tbody>
+
+              </table>
+
+            </div>
+          </div>
+
+                    {/* ================= MONTHLY TREND + STATUS DISTRIBUTION ================= */}
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+
+            {/* Monthly Trend */}
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Monthly Leave Trend
+                  </h2>
+
+                  <p className="text-sm text-slate-500">
+                    Leave requests created this year.
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                  2026
+                </span>
+              </div>
+
+              <svg viewBox="0 0 420 180" className="w-full">
+
+                {[30, 60, 90, 120, 150].map((y) => (
+                  <line
+                    key={y}
+                    x1="30"
+                    y1={y}
+                    x2="395"
+                    y2={y}
+                    stroke="#E2E8F0"
+                    strokeDasharray="3 3"
+                  />
+                ))}
+
+                <polyline
+                  fill="none"
+                  stroke="#2563EB"
+                  strokeWidth="3"
+                  points={monthlyTrend
+                    .map((item, index) => {
+                      const x = 35 + index * 31;
+                      const y = 150 - item.count * 8;
+                      return `${x},${y}`;
+                    })
+                    .join(" ")}
+                />
+
+                {monthlyTrend.map((item, index) => {
+                  const x = 35 + index * 31;
+                  const y = 150 - item.count * 8;
+
+                  return (
+                    <g key={item.month}>
+                      <circle cx={x} cy={y} r="4" fill="#2563EB" />
+
+                      <text
+                        x={x}
+                        y="170"
+                        fontSize="10"
+                        textAnchor="middle"
+                        fill="#64748B"
+                      >
+                        {item.month}
+                      </text>
+
+                      <text
+                        x={x}
+                        y={y - 10}
+                        fontSize="10"
+                        textAnchor="middle"
+                        fill="#2563EB"
+                      >
+                        {item.count}
+                      </text>
+                    </g>
+                  );
+                })}
+
+              </svg>
+
+            </div>
+
+            {/* Leave Status Distribution */}
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
+              <div className="mb-5">
+                <h2 className="text-lg font-bold text-slate-900">
+                  Leave Status Distribution
+                </h2>
+
+                <p className="text-sm text-slate-500">
+                  Overall leave request percentage.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+
+                {pieData.map((item) => (
+                  <div key={item.label}>
+
+                    <div className="mb-1 flex justify-between text-sm">
+                      <span className="font-medium text-slate-700">
+                        {item.label}
+                      </span>
+
+                      <span className="font-semibold text-slate-700">
+                        {item.value} ({item.percent}%)
+                      </span>
+                    </div>
+
+                    <div className="h-3 rounded-full bg-slate-100">
+
+                      <div
+                        className="h-3 rounded-full"
+                        style={{
+                          width: `${item.percent}%`,
+                          backgroundColor: item.color,
+                        }}
+                      />
+
+                    </div>
+
+                  </div>
+                ))}
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* ================= MANAGER / ADMIN ANALYTICS ================= */}
+
+          <div className="mt-8 grid gap-5 md:grid-cols-4">
+
+            <div className="rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-80">
+                Waiting for Manager Review
+              </p>
+
+              <h2 className="mt-3 text-4xl font-bold">
+                {
+                  leaveRequests.filter(
+                    (leave) =>
+                      normalizeLevel(leave.current_level) === "manager" &&
+                      normalizeStatus(leave.status) === "pending"
+                  ).length
+                }
+              </h2>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-700 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-80">
+                Waiting for Admin Review
+              </p>
+
+              <h2 className="mt-3 text-4xl font-bold">
+                {
+                  leaveRequests.filter(
+                    (leave) =>
+                      normalizeLevel(leave.current_level) === "admin" &&
+                      ["pending", "manager_approved"].includes(
+                        normalizeStatus(leave.status)
+                      )
+                  ).length
+                }
+              </h2>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-r from-green-600 to-green-700 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-80">
+                Completed Requests
+              </p>
+
+              <h2 className="mt-3 text-4xl font-bold">
+                {
+                  leaveRequests.filter(
+                    (leave) =>
+                      normalizeStatus(leave.status) === "approved"
+                  ).length
+                }
+              </h2>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-r from-purple-600 to-purple-700 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-80">
+                Hold Requests
+              </p>
+
+              <h2 className="mt-3 text-4xl font-bold">
+                {
+                  leaveRequests.filter(
+                    (leave) =>
+                      normalizeStatus(leave.status) === "hold"
+                  ).length
+                }
+              </h2>
+            </div>
+
+          </div>
+
+          {/* ================= RECENT LEAVE ACTIVITY ================= */}
+
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Recent Leave Activity
+                </h2>
+
+                <p className="text-sm text-slate-500">
+                  Latest leave requests across your organization.
+                </p>
+              </div>
+
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                Enterprise Activity
+              </span>
+            </div>
+
+            <div className="space-y-4">
+
+              {leaveRequests.slice(0, 5).map((leave) => (
+                <div
+                  key={leave.id}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 p-4 transition hover:bg-slate-50"
+                >
+
+                  <div className="flex items-center gap-4">
+
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-700 text-sm font-bold text-white">
+                      {leave.requested_by_name?.charAt(0) || "U"}
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold text-slate-900">
+                        {leave.requested_by_name}
+                      </h4>
+
+                      <p className="text-sm text-slate-500">
+                        {leave.leave_type} • {leave.days} Day(s)
+                      </p>
+
+                      <p className="text-xs text-slate-400">
+                        {leave.start_date} → {leave.end_date}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
+                      leave.status
+                    )}`}
+                  >
+                    {getStatusText(leave.status)}
+                  </span>
+
+                </div>
+              ))}
+
+            </div>
+
+          </div>
+
+          {/* ================= QUICK SUMMARY ================= */}
+
+          <div className="mt-8 grid gap-5 md:grid-cols-4">
+
+            <div className="rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-80">
+                Total Employees on Leave
+              </p>
+
+              <h2 className="mt-3 text-3xl font-bold">
+                {dashboard.pending + dashboard.approved}
+              </h2>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-80">
+                Approval Success Rate
+              </p>
+
+              <h2 className="mt-3 text-3xl font-bold">
+                {analytics.approvalRate}%
+              </h2>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-80">
+                Rejected Requests
+              </p>
+
+              <h2 className="mt-3 text-3xl font-bold">
+                {dashboard.rejected}
+              </h2>
+            </div>
+
+            <div className="rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 p-5 text-white shadow-lg">
+              <p className="text-sm opacity-80">
+                Pending Reviews
+              </p>
+
+              <h2 className="mt-3 text-3xl font-bold">
+                {dashboard.pending + dashboard.hold}
+              </h2>
+            </div>
+
+          </div>
+
+          {/* ================= MODALS ================= */}
+
+          {showCreateModal && (
+            <CreateLeaveModal
+              userRole={userRole}
+              closeModal={() => setShowCreateModal(false)}
+              refreshLeaveRequests={fetchLeaveRequests}
+            />
+          )}
+
+          {showActionModal && selectedLeave && (
+            <LeaveActionModal
+              leave={selectedLeave}
+              actionType={actionType}
+              closeModal={() => {
+                setShowActionModal(false);
+                setSelectedLeave(null);
+                setActionType("");
+              }}
+              refreshLeaveRequests={fetchLeaveRequests}
+            />
+          )}
+
+          {showHistoryModal && selectedLeave && (
+            <LeaveHistoryModal
+              leave={selectedLeave}
+              closeModal={() => {
+                setShowHistoryModal(false);
+                setSelectedLeave(null);
+              }}
+            />
+          )}
+
+        </main>
+      </div>
+    </div>
+  );
+}
+
+export default LeaveRequests;

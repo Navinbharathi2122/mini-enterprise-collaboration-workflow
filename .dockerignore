@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+__pycache__
+*.py[cod]
+.env
+.env.*
+!.env.example
+app/uploads/*
+!app/uploads/.gitkeep
+mini-enterprise-frontend/node_modules
+mini-enterprise-frontend/dist
+mini-enterprise-frontend/.vite
